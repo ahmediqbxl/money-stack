@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,12 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line } from 'recharts';
-import { DollarSign, TrendingDown, TrendingUp, CreditCard, PiggyBank, AlertTriangle, Lightbulb, Target } from 'lucide-react';
+import { DollarSign, TrendingDown, TrendingUp, CreditCard, PiggyBank, AlertTriangle, Lightbulb, Target, LogOut, User } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
+  const { user, signOut } = useAuth();
 
   // Sample data for demo purposes
   const monthlySpending = [
@@ -75,6 +76,14 @@ const Index = () => {
     }, 2000);
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+    toast({
+      title: "Signed Out",
+      description: "You've been successfully signed out.",
+    });
+  };
+
   const totalSpent = categoryData.reduce((sum, cat) => sum + cat.value, 0);
   const totalBudget = categoryData.reduce((sum, cat) => sum + cat.budget, 0);
   const potentialSavings = aiInsights.reduce((sum, insight) => sum + insight.potential, 0);
@@ -82,32 +91,32 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
       <div className="container mx-auto p-6 space-y-8">
-        {/* Header */}
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-            AI Financial Advisor
-          </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Connect your accounts and let AI analyze your spending to find personalized savings opportunities
-          </p>
-          <Button 
-            onClick={handleConnectBank} 
-            size="lg" 
-            className="bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
-            disabled={isAnalyzing}
-          >
-            {isAnalyzing ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Analyzing Transactions...
-              </>
-            ) : (
-              <>
-                <CreditCard className="w-4 h-4 mr-2" />
-                Connect Bank Account
-              </>
-            )}
-          </Button>
+        {/* Header with user info */}
+        <div className="flex justify-between items-center">
+          <div className="text-center flex-1 space-y-4">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+              AI Financial Advisor
+            </h1>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Connect your accounts and let AI analyze your spending to find personalized savings opportunities
+            </p>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 text-gray-600">
+              <User className="w-4 h-4" />
+              <span className="text-sm">{user?.email}</span>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleSignOut}
+              className="flex items-center space-x-2"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out</span>
+            </Button>
+          </div>
         </div>
 
         {/* Overview Cards */}
