@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import FlinksConnect from "@/components/FlinksConnect";
 import ConnectedAccounts from "@/components/ConnectedAccounts";
 import AITransactionAnalysis from "@/components/AITransactionAnalysis";
+import TransactionManager from "@/components/TransactionManager";
 
 const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -189,10 +190,11 @@ const Index = () => {
 
         {/* Main Content */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="insights">AI Insights</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            <TabsTrigger value="insights">AI Insights</TabsTrigger>
+            <TabsTrigger value="manage">Manage</TabsTrigger>
             <TabsTrigger value="trends">Trends</TabsTrigger>
           </TabsList>
 
@@ -271,6 +273,10 @@ const Index = () => {
             </div>
           </TabsContent>
 
+          <TabsContent value="transactions" className="space-y-6">
+            <TransactionManager />
+          </TabsContent>
+
           <TabsContent value="insights" className="space-y-6">
             <div className="grid gap-6">
               <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-green-50">
@@ -313,42 +319,14 @@ const Index = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="transactions" className="space-y-6">
+          <TabsContent value="manage" className="space-y-6">
             <Card className="border-0 shadow-lg">
               <CardHeader>
-                <CardTitle>Recent Transactions</CardTitle>
-                <CardDescription>Your latest account activity</CardDescription>
+                <CardTitle>Transaction Management</CardTitle>
+                <CardDescription>Search, filter, and organize your transactions</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {recentTransactions.map((transaction) => (
-                    <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center space-x-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          transaction.type === 'deposit' ? 'bg-green-100' : 'bg-red-100'
-                        }`}>
-                          {transaction.type === 'deposit' ? (
-                            <TrendingUp className="w-5 h-5 text-green-600" />
-                          ) : (
-                            <TrendingDown className="w-5 h-5 text-red-600" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium">{transaction.merchant}</p>
-                          <p className="text-sm text-gray-500">{transaction.category}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-medium ${
-                          transaction.amount > 0 ? 'text-green-600' : 'text-gray-900'
-                        }`}>
-                          {transaction.amount > 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
-                        </p>
-                        <p className="text-sm text-gray-500">{transaction.date}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <TransactionManager />
               </CardContent>
             </Card>
           </TabsContent>
