@@ -8,6 +8,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 import { DollarSign, TrendingDown, TrendingUp, CreditCard, PiggyBank, AlertTriangle, Lightbulb, Target, LogOut, User } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import FlinksConnect from "@/components/FlinksConnect";
 
 const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -117,6 +118,11 @@ const Index = () => {
               <span>Sign Out</span>
             </Button>
           </div>
+        </div>
+
+        {/* Bank Connection Section */}
+        <div className="max-w-md mx-auto">
+          <FlinksConnect />
         </div>
 
         {/* Overview Cards */}
