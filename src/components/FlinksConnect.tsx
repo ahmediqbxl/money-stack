@@ -4,7 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Building2, X } from 'lucide-react';
 
-const FlinksConnect = () => {
+interface FlinksConnectProps {
+  onSuccess?: (loginId: string) => void;
+}
+
+const FlinksConnect = ({ onSuccess }: FlinksConnectProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
 
   const handleConnectBank = () => {
@@ -39,14 +43,21 @@ const FlinksConnect = () => {
       console.log('Flinks Connect Event:', event.data);
       
       // Handle different Flinks events
-      if (event.data.type === 'close' || event.data.type === 'success') {
+      if (event.data.type === 'close') {
         handleCloseConnect();
       }
       
       if (event.data.type === 'success') {
         // Handle successful bank connection
         console.log('Bank connected successfully:', event.data);
-        // Here you would typically save the connection data to your database
+        
+        // Extract login ID from Flinks response
+        const loginId = event.data.loginId || event.data.data?.loginId;
+        if (loginId && onSuccess) {
+          onSuccess(loginId);
+        }
+        
+        handleCloseConnect();
       }
     };
 
@@ -55,7 +66,7 @@ const FlinksConnect = () => {
     return () => {
       window.removeEventListener('message', handleFlinksMessage);
     };
-  }, []);
+  }, [onSuccess]);
 
   return (
     <>

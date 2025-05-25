@@ -1,77 +1,36 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { Building2, Plus, Trash2, RefreshCw, Brain } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import FlinksConnect from './FlinksConnect';
-
-interface ConnectedAccount {
-  id: string;
-  bank_name: string;
-  account_type: string;
-  account_number: string;
-  balance: number;
-  currency: string;
-  connected_at: string;
-}
+import { useFlinksData } from '@/hooks/useFlinksData';
 
 const ConnectedAccounts = () => {
-  const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [showConnectNew, setShowConnectNew] = useState(false);
   const { toast } = useToast();
-
-  // Mock data for demonstration
-  useEffect(() => {
-    const mockAccounts: ConnectedAccount[] = [
-      {
-        id: '1',
-        bank_name: 'TD Bank',
-        account_type: 'Checking',
-        account_number: '****1234',
-        balance: 2450.67,
-        currency: 'CAD',
-        connected_at: '2024-05-20'
-      },
-      {
-        id: '2',
-        bank_name: 'RBC',
-        account_type: 'Savings',
-        account_number: '****5678',
-        balance: 8920.32,
-        currency: 'CAD',
-        connected_at: '2024-05-22'
-      }
-    ];
-    setAccounts(mockAccounts);
-  }, []);
+  const {
+    accounts,
+    transactions,
+    isLoading,
+    fetchFlinksData,
+    handleFlinksSuccess,
+    categorizeTransactions,
+  } = useFlinksData();
 
   const handleRefreshAccounts = async () => {
-    setIsLoading(true);
-    try {
-      // In a real implementation, this would fetch fresh data from Flinks
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast({
-        title: "Accounts Refreshed",
-        description: "Account balances and transactions have been updated.",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to refresh account data.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    await fetchFlinksData();
   };
 
   const handleRemoveAccount = async (accountId: string) => {
     try {
-      setAccounts(accounts.filter(acc => acc.id !== accountId));
+      // In a real implementation, you would call Flinks API to disconnect
+      // For now, we'll just remove from local storage and refresh
+      localStorage.removeItem('flinks_login_id');
+      window.location.reload();
+      
       toast({
         title: "Account Removed",
         description: "Bank account has been disconnected.",
@@ -83,6 +42,15 @@ const ConnectedAccounts = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const handleConnectSuccess = (loginId: string) => {
+    handleFlinksSuccess(loginId);
+    setShowConnectNew(false);
+    toast({
+      title: "Account Connected",
+      description: "Your bank account has been successfully connected!",
+    });
   };
 
   const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
@@ -100,7 +68,7 @@ const ConnectedAccounts = () => {
             Back to Accounts
           </Button>
         </div>
-        <FlinksConnect />
+        <FlinksConnect onSuccess={handleConnectSuccess} />
       </div>
     );
   }
@@ -110,20 +78,35 @@ const ConnectedAccounts = () => {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Connected Accounts</h3>
-          <p className="text-sm text-gray-600">
-            Total Balance: <span className="font-semibold text-green-600">${totalBalance.toLocaleString()}</span>
-          </p>
+          {accounts.length > 0 && (
+            <p className="text-sm text-gray-600">
+              Total Balance: <span className="font-semibold text-green-600">${totalBalance.toLocaleString()}</span>
+            </p>
+          )}
         </div>
         <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefreshAccounts}
-            disabled={isLoading}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          {accounts.length > 0 && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={categorizeTransactions}
+                disabled={isLoading || transactions.length === 0}
+              >
+                <Brain className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                AI Categorize
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefreshAccounts}
+                disabled={isLoading}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </>
+          )}
           <Button
             size="sm"
             onClick={() => setShowConnectNew(true)}
@@ -197,6 +180,40 @@ const ConnectedAccounts = () => {
               <Plus className="w-4 h-4 mr-2" />
               Connect Account
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {transactions.length > 0 && (
+        <Card className="border-0 shadow-md">
+          <CardHeader>
+            <CardTitle>Recent Transactions ({transactions.length})</CardTitle>
+            <CardDescription>Latest transactions from your connected accounts</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {transactions.slice(0, 10).map((transaction) => (
+                <div key={transaction.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{transaction.description}</p>
+                    <p className="text-xs text-gray-500">
+                      {transaction.merchant && `${transaction.merchant} • `}
+                      {transaction.category && (
+                        <Badge variant="outline" className="text-xs">{transaction.category}</Badge>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-medium text-sm ${
+                      transaction.amount > 0 ? 'text-green-600' : 'text-gray-900'
+                    }`}>
+                      {transaction.amount > 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
+                    </p>
+                    <p className="text-xs text-gray-500">{transaction.date}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
