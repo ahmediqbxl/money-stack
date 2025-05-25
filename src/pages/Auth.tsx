@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -77,7 +76,7 @@ const Auth = () => {
         <div className="space-y-8">
           <div className="text-center lg:text-left">
             <h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent mb-4">
-              AI Financial Advisor
+              MoneySpread
             </h1>
             <p className="text-xl text-gray-600 mb-8">
               Connect your accounts and let AI analyze your spending to find personalized savings opportunities
