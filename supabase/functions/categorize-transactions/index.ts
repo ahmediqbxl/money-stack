@@ -20,6 +20,7 @@ serve(async (req) => {
       throw new Error('OpenAI API key not configured');
     }
 
+    console.log('Processing', transactions.length, 'transactions');
     const categorizedTransactions = [];
 
     for (const transaction of transactions) {
@@ -32,6 +33,8 @@ serve(async (req) => {
       - Merchant: ${transaction.merchant || 'Unknown'}
       
       Respond with only the category name, nothing else.`;
+
+      console.log('Calling OpenAI for transaction:', transaction.description);
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -50,14 +53,31 @@ serve(async (req) => {
         }),
       });
 
+      if (!response.ok) {
+        console.error('OpenAI API error:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('OpenAI API error details:', errorText);
+        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+      }
+
       const data = await response.json();
+      console.log('OpenAI response:', JSON.stringify(data, null, 2));
+
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        console.error('Unexpected OpenAI response structure:', data);
+        throw new Error('Invalid response from OpenAI API');
+      }
+
       const category = data.choices[0].message.content.trim();
+      console.log('Categorized as:', category);
 
       categorizedTransactions.push({
         ...transaction,
         category: category
       });
     }
+
+    console.log('Successfully categorized', categorizedTransactions.length, 'transactions');
 
     return new Response(
       JSON.stringify({ categorizedTransactions }),
