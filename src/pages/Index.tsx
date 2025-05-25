@@ -9,6 +9,8 @@ import { DollarSign, TrendingDown, TrendingUp, CreditCard, PiggyBank, AlertTrian
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import FlinksConnect from "@/components/FlinksConnect";
+import ConnectedAccounts from "@/components/ConnectedAccounts";
+import AITransactionAnalysis from "@/components/AITransactionAnalysis";
 
 const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -120,9 +122,14 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Bank Connection Section */}
-        <div className="max-w-md mx-auto">
-          <FlinksConnect />
+        {/* Connected Accounts Section */}
+        <div className="max-w-4xl mx-auto">
+          <ConnectedAccounts />
+        </div>
+
+        {/* AI Analysis Section */}
+        <div className="max-w-4xl mx-auto">
+          <AITransactionAnalysis />
         </div>
 
         {/* Overview Cards */}
