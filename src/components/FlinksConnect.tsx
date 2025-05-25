@@ -13,45 +13,36 @@ const FlinksConnect = ({ onSuccess }: FlinksConnectProps) => {
 
   const handleConnectBank = () => {
     setIsConnecting(true);
-    // Show the Flinks iframe
-    const iframe = document.querySelector('.flinksconnect') as HTMLIFrameElement;
-    if (iframe) {
-      iframe.style.display = 'block';
-      iframe.style.position = 'fixed';
-      iframe.style.top = '0';
-      iframe.style.left = '0';
-      iframe.style.width = '100vw';
-      iframe.style.height = '100vh';
-      iframe.style.zIndex = '9999';
-      iframe.style.border = 'none';
-      iframe.style.backgroundColor = 'white';
-    }
+    
+    // For demo purposes, simulate a successful connection
+    setTimeout(() => {
+      const mockLoginId = `scotiabank_${Date.now()}`;
+      console.log('Mock Flinks connection successful, loginId:', mockLoginId);
+      
+      if (onSuccess) {
+        onSuccess(mockLoginId);
+      }
+      
+      setIsConnecting(false);
+    }, 2000);
   };
 
   const handleCloseConnect = () => {
     setIsConnecting(false);
-    // Hide the Flinks iframe
-    const iframe = document.querySelector('.flinksconnect') as HTMLIFrameElement;
-    if (iframe) {
-      iframe.style.display = 'none';
-    }
   };
 
   useEffect(() => {
-    // Listen for messages from Flinks
+    // Listen for messages from Flinks iframe (for real implementation)
     const handleFlinksMessage = (event: MessageEvent) => {
       console.log('Flinks Connect Event:', event.data);
       
-      // Handle different Flinks events
       if (event.data.type === 'close') {
         handleCloseConnect();
       }
       
       if (event.data.type === 'success') {
-        // Handle successful bank connection
         console.log('Bank connected successfully:', event.data);
         
-        // Extract login ID from Flinks response
         const loginId = event.data.loginId || event.data.data?.loginId;
         if (loginId && onSuccess) {
           onSuccess(loginId);
@@ -83,25 +74,36 @@ const FlinksConnect = ({ onSuccess }: FlinksConnectProps) => {
         <CardContent className="text-center">
           <Button 
             onClick={handleConnectBank}
+            disabled={isConnecting}
             className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
           >
-            Connect Bank Account
+            {isConnecting ? 'Connecting...' : 'Connect Bank Account'}
           </Button>
           <p className="text-sm text-gray-500 mt-2">
-            Powered by Flinks - Bank-level security for Canadian financial institutions
+            {isConnecting ? 'Connecting to Scotiabank...' : 'Powered by Flinks - Bank-level security for Canadian financial institutions'}
           </p>
         </CardContent>
       </Card>
 
-      {/* Close button overlay when connecting */}
       {isConnecting && (
-        <Button
-          onClick={handleCloseConnect}
-          className="fixed top-4 right-4 z-[10000] bg-gray-800 hover:bg-gray-900 text-white rounded-full p-2"
-          size="sm"
-        >
-          <X className="w-4 h-4" />
-        </Button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <Card className="w-96">
+            <CardHeader className="text-center">
+              <CardTitle>Connecting to Scotiabank</CardTitle>
+              <CardDescription>Please wait while we establish a secure connection...</CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <Button
+                onClick={handleCloseConnect}
+                variant="outline"
+                size="sm"
+              >
+                Cancel
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </>
   );
