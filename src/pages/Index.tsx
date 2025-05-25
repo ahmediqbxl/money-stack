@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import FlinksConnect from "@/components/FlinksConnect";
 import ConnectedAccounts from "@/components/ConnectedAccounts";
 import AITransactionAnalysis from "@/components/AITransactionAnalysis";
 import TransactionManager from "@/components/TransactionManager";
+import BudgetSettings from "@/components/BudgetSettings";
 
 const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -190,9 +192,10 @@ const Index = () => {
 
         {/* Main Content */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            <TabsTrigger value="budgets">Budgets</TabsTrigger>
             <TabsTrigger value="insights">AI Insights</TabsTrigger>
             <TabsTrigger value="manage">Manage</TabsTrigger>
             <TabsTrigger value="trends">Trends</TabsTrigger>
@@ -275,6 +278,10 @@ const Index = () => {
 
           <TabsContent value="transactions" className="space-y-6">
             <TransactionManager />
+          </TabsContent>
+
+          <TabsContent value="budgets" className="space-y-6">
+            <BudgetSettings />
           </TabsContent>
 
           <TabsContent value="insights" className="space-y-6">
