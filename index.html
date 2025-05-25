@@ -16,10 +16,30 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@lovable_dev" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    
+    <style>
+      @media (min-width: 768px) {
+        .flinksconnect { width: 100%; }
+      }
+    </style>
   </head>
 
   <body>
     <div id="root"></div>
+    
+    <!-- Flinks Connect -->
+    <iframe class="flinksconnect" height="760"
+            src="https://demo.flinks.com/v2/"
+            style="display: none;">
+    </iframe>
+
+    <!-- Event Listener -->
+    <script>
+      window.addEventListener('message', function(e) {
+        console.log('Flinks message:', e.data);
+      });
+    </script>
+    
     <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
     <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
     <script type="module" src="/src/main.tsx"></script>
