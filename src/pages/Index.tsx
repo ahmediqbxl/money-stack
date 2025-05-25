@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -100,7 +99,7 @@ const Index = () => {
         {/* Header with user info */}
         <div className="flex justify-between items-center">
           <div className="text-center flex-1 space-y-4">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent leading-tight py-2">
               MoneySpread
             </h1>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
