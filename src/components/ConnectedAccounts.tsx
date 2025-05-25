@@ -1,12 +1,11 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Plus, Trash2, RefreshCw, Brain } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import FlinksConnect from './FlinksConnect';
-import { useFlinksData } from '@/hooks/useFlinksData';
+import PlaidConnect from './PlaidConnect';
+import { usePlaidData } from '@/hooks/usePlaidData';
 
 const ConnectedAccounts = () => {
   const [showConnectNew, setShowConnectNew] = useState(false);
@@ -15,20 +14,20 @@ const ConnectedAccounts = () => {
     accounts,
     transactions,
     isLoading,
-    fetchFlinksData,
-    handleFlinksSuccess,
+    fetchPlaidData,
+    handlePlaidSuccess,
     categorizeTransactions,
-  } = useFlinksData();
+  } = usePlaidData();
 
   const handleRefreshAccounts = async () => {
-    await fetchFlinksData();
+    await fetchPlaidData();
   };
 
   const handleRemoveAccount = async (accountId: string) => {
     try {
-      // In a real implementation, you would call Flinks API to disconnect
+      // In a real implementation, you would call Plaid API to disconnect
       // For now, we'll just remove from local storage and refresh
-      localStorage.removeItem('flinks_login_id');
+      localStorage.removeItem('plaid_access_token');
       window.location.reload();
       
       toast({
@@ -44,12 +43,12 @@ const ConnectedAccounts = () => {
     }
   };
 
-  const handleConnectSuccess = (loginId: string) => {
-    handleFlinksSuccess(loginId);
+  const handleConnectSuccess = (accessToken: string) => {
+    handlePlaidSuccess(accessToken);
     setShowConnectNew(false);
     toast({
       title: "Account Connected",
-      description: "Your bank account has been successfully connected!",
+      description: "Your bank account has been successfully connected via Plaid!",
     });
   };
 
@@ -68,7 +67,7 @@ const ConnectedAccounts = () => {
             Back to Accounts
           </Button>
         </div>
-        <FlinksConnect onSuccess={handleConnectSuccess} />
+        <PlaidConnect onSuccess={handleConnectSuccess} />
       </div>
     );
   }
@@ -135,7 +134,7 @@ const ConnectedAccounts = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Badge variant="secondary">Connected</Badge>
+                  <Badge variant="secondary">Connected via Plaid</Badge>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -171,7 +170,7 @@ const ConnectedAccounts = () => {
             <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Connected Accounts</h3>
             <p className="text-gray-500 mb-4">
-              Connect your first bank account to start tracking your finances
+              Connect your first bank account using Plaid to start tracking your finances
             </p>
             <Button
               onClick={() => setShowConnectNew(true)}
