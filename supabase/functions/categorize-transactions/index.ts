@@ -14,68 +14,122 @@ serve(async (req) => {
 
   try {
     const { transactions } = await req.json();
-    const openAIApiKey = Deno.env.get('open_api_key');
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     
     if (!openAIApiKey) {
       throw new Error('OpenAI API key not configured');
     }
 
     console.log('Processing', transactions.length, 'transactions');
-    const categorizedTransactions = [];
+    
+    // Batch all transactions into a single API call to avoid rate limits
+    const transactionDescriptions = transactions.map((t: any) => 
+      `- ${t.description} ($${Math.abs(t.amount)}) at ${t.merchant || 'Unknown'}`
+    ).join('\n');
 
-    for (const transaction of transactions) {
-      const prompt = `Categorize this financial transaction into one of these categories: 
-      "Food & Dining", "Transportation", "Shopping", "Entertainment", "Bills & Utilities", "Healthcare", "Income", "Transfer", "Other".
+    const prompt = `Categorize these financial transactions into one of these categories: 
+    "Food & Dining", "Transportation", "Shopping", "Entertainment", "Bills & Utilities", "Healthcare", "Income", "Transfer", "Other".
+    
+    Transactions:
+    ${transactionDescriptions}
+    
+    Respond with a JSON array where each object has "description" and "category" fields. Match the description exactly as provided.
+    
+    Example format:
+    [
+      {"description": "Metro Grocery Store", "category": "Food & Dining"},
+      {"description": "Uber Trip Downtown", "category": "Transportation"}
+    ]`;
+
+    console.log('Making single batch API call to OpenAI');
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a financial transaction categorization expert. Always respond with valid JSON only.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 1000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI API error:', response.status, response.statusText, errorText);
       
-      Transaction details:
-      - Description: ${transaction.description}
-      - Amount: $${Math.abs(transaction.amount)}
-      - Merchant: ${transaction.merchant || 'Unknown'}
-      
-      Respond with only the category name, nothing else.`;
-
-      console.log('Calling OpenAI for transaction:', transaction.description);
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'You are a financial transaction categorization expert. Be precise and consistent.' },
-            { role: 'user', content: prompt }
-          ],
-          temperature: 0.1,
-          max_tokens: 50,
-        }),
+      // Fallback to simple rule-based categorization if OpenAI fails
+      console.log('Falling back to rule-based categorization');
+      const categorizedTransactions = transactions.map((transaction: any) => {
+        const description = transaction.description.toLowerCase();
+        const merchant = (transaction.merchant || '').toLowerCase();
+        
+        let category = 'Other';
+        
+        if (description.includes('grocery') || description.includes('food') || merchant.includes('restaurant') || merchant.includes('tim hortons') || merchant.includes('mcdonald') || description.includes('metro')) {
+          category = 'Food & Dining';
+        } else if (description.includes('uber') || description.includes('taxi') || description.includes('transit') || description.includes('gas') || merchant.includes('shell') || description.includes('ttc')) {
+          category = 'Transportation';
+        } else if (description.includes('amazon') || description.includes('shop') || merchant.includes('canadian tire') || description.includes('target')) {
+          category = 'Shopping';
+        } else if (description.includes('netflix') || description.includes('spotify') || description.includes('entertainment')) {
+          category = 'Entertainment';
+        } else if (description.includes('hydro') || description.includes('bell') || description.includes('rogers') || description.includes('utility') || description.includes('bill')) {
+          category = 'Bills & Utilities';
+        } else if (description.includes('pharmacy') || description.includes('drug mart') || description.includes('medical')) {
+          category = 'Healthcare';
+        } else if (description.includes('deposit') || description.includes('salary') || description.includes('payroll') || transaction.amount > 0) {
+          category = 'Income';
+        }
+        
+        return {
+          ...transaction,
+          category: category
+        };
       });
 
-      if (!response.ok) {
-        console.error('OpenAI API error:', response.status, response.statusText);
-        const errorText = await response.text();
-        console.error('OpenAI API error details:', errorText);
-        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('OpenAI response:', JSON.stringify(data, null, 2));
-
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        console.error('Unexpected OpenAI response structure:', data);
-        throw new Error('Invalid response from OpenAI API');
-      }
-
-      const category = data.choices[0].message.content.trim();
-      console.log('Categorized as:', category);
-
-      categorizedTransactions.push({
-        ...transaction,
-        category: category
-      });
+      return new Response(
+        JSON.stringify({ categorizedTransactions }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
+
+    const data = await response.json();
+    console.log('OpenAI response received successfully');
+
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('Invalid response from OpenAI API');
+    }
+
+    const responseContent = data.choices[0].message.content.trim();
+    console.log('OpenAI response content:', responseContent);
+
+    let categorizations;
+    try {
+      // Try to parse the JSON response
+      categorizations = JSON.parse(responseContent);
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response as JSON:', parseError);
+      throw new Error('Invalid JSON response from OpenAI');
+    }
+
+    // Match categorizations with original transactions
+    const categorizedTransactions = transactions.map((transaction: any) => {
+      const match = categorizations.find((cat: any) => 
+        cat.description === transaction.description
+      );
+      
+      return {
+        ...transaction,
+        category: match ? match.category : 'Other'
+      };
+    });
 
     console.log('Successfully categorized', categorizedTransactions.length, 'transactions');
 
