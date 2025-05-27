@@ -41,7 +41,7 @@ serve(async (req) => {
     }
 
     console.log('🌐 Making request to Plaid API...')
-    // Fixed the endpoint URL - it should be /link/token/exchange not /link/token/exchange
+    // Fixed the endpoint URL - it should be /link/token/exchange
     const response = await fetch('https://sandbox.plaid.com/link/token/exchange', {
       method: 'POST',
       headers: {
@@ -91,7 +91,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ error: error.message }),
       {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
       },
     )
