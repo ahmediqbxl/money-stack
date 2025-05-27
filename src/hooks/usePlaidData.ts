@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { plaidService } from '@/services/plaidService';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -27,6 +27,7 @@ interface PlaidTransaction {
 export const usePlaidData = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [plaidAccessToken, setPlaidAccessToken] = useState<string | null>(null);
+  const [hasFetched, setHasFetched] = useState(false);
   const { toast } = useToast();
   const { 
     accounts, 
@@ -44,21 +45,16 @@ export const usePlaidData = () => {
     }
   }, []);
 
-  // Fetch data when access token is available
-  useEffect(() => {
-    if (plaidAccessToken && accounts.length === 0) {
-      fetchPlaidData();
-    }
-  }, [plaidAccessToken, accounts.length]);
-
-  const fetchPlaidData = async () => {
-    if (!plaidAccessToken) return;
+  const fetchPlaidData = useCallback(async () => {
+    if (!plaidAccessToken || isLoading || hasFetched) return;
     
     setIsLoading(true);
+    setHasFetched(true);
+    
     try {
       const data = await plaidService.getAccountsAndTransactions(plaidAccessToken);
       
-      // Save accounts to database
+      // Save accounts to database with better duplicate checking
       const accountPromises = data.accounts.map(async (account) => {
         const dbAccount = {
           external_account_id: account.account_id,
@@ -78,7 +74,7 @@ export const usePlaidData = () => {
 
       const savedAccounts = await Promise.all(accountPromises);
 
-      // Transform and save transactions
+      // Transform and save transactions with better duplicate handling
       const transformedTransactions = data.transactions.map(transaction => {
         const accountId = savedAccounts.find(
           acc => acc.external_account_id === transaction.account_id
@@ -96,7 +92,9 @@ export const usePlaidData = () => {
         };
       }).filter(t => t.account_id); // Filter out transactions without valid account_id
 
-      await saveTransactions(transformedTransactions);
+      if (transformedTransactions.length > 0) {
+        await saveTransactions(transformedTransactions);
+      }
 
       toast({
         title: "Accounts Updated",
@@ -112,11 +110,12 @@ export const usePlaidData = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [plaidAccessToken, isLoading, hasFetched, saveAccount, saveTransactions, toast]);
 
   const handlePlaidSuccess = (accessToken: string) => {
     localStorage.setItem('plaid_access_token', accessToken);
     setPlaidAccessToken(accessToken);
+    setHasFetched(false); // Reset to allow fetching with new token
   };
 
   const categorizeTransactions = async () => {

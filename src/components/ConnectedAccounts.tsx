@@ -1,5 +1,4 @@
-
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,14 +20,6 @@ const ConnectedAccounts = () => {
     handlePlaidSuccess,
     categorizeTransactions,
   } = usePlaidData();
-
-  // Automatically fetch account data when component mounts
-  useEffect(() => {
-    const storedAccessToken = localStorage.getItem('plaid_access_token');
-    if (storedAccessToken && accounts.length === 0) {
-      fetchPlaidData();
-    }
-  }, [fetchPlaidData, accounts.length]);
 
   const handleRefreshAccounts = async () => {
     await fetchPlaidData();

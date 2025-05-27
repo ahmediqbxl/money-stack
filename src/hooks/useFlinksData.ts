@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { flinksService } from '@/services/flinksService';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -27,6 +27,7 @@ interface FlinksTransaction {
 export const useFlinksData = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [flinksLoginId, setFlinksLoginId] = useState<string | null>(null);
+  const [hasFetched, setHasFetched] = useState(false);
   const { toast } = useToast();
   const { 
     accounts, 
@@ -44,21 +45,16 @@ export const useFlinksData = () => {
     }
   }, []);
 
-  // Fetch data when login ID is available
-  useEffect(() => {
-    if (flinksLoginId && accounts.length === 0) {
-      fetchFlinksData();
-    }
-  }, [flinksLoginId, accounts.length]);
-
-  const fetchFlinksData = async () => {
-    if (!flinksLoginId) return;
+  const fetchFlinksData = useCallback(async () => {
+    if (!flinksLoginId || isLoading || hasFetched) return;
     
     setIsLoading(true);
+    setHasFetched(true);
+    
     try {
       const data = await flinksService.getAccountsAndTransactions(flinksLoginId);
       
-      // Save accounts to database
+      // Save accounts to database with better duplicate checking
       const accountPromises = data.accounts.map(async (account) => {
         const dbAccount = {
           external_account_id: account.id,
@@ -117,7 +113,9 @@ export const useFlinksData = () => {
         is_manual_category: false,
       })).filter(t => t.account_id);
 
-      await saveTransactions(transformedTransactions);
+      if (transformedTransactions.length > 0) {
+        await saveTransactions(transformedTransactions);
+      }
 
       toast({
         title: "Accounts Updated",
@@ -133,11 +131,12 @@ export const useFlinksData = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [flinksLoginId, isLoading, hasFetched, saveAccount, saveTransactions, toast]);
 
   const handleFlinksSuccess = (loginId: string) => {
     localStorage.setItem('flinks_login_id', loginId);
     setFlinksLoginId(loginId);
+    setHasFetched(false); // Reset to allow fetching with new token
   };
 
   const categorizeTransactions = async () => {
