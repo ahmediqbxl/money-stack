@@ -13,16 +13,28 @@ serve(async (req) => {
   }
 
   try {
+    console.log('Getting Plaid credentials from environment...')
+    
     // Get Plaid credentials from environment variables
     const clientId = Deno.env.get('PLAID_CLIENT_ID')
     const secret = Deno.env.get('PLAID_SECRET_KEY')
 
+    console.log('Plaid Client ID exists:', !!clientId)
+    console.log('Plaid Secret exists:', !!secret)
+    console.log('Client ID length:', clientId ? clientId.length : 0)
+    console.log('Secret length:', secret ? secret.length : 0)
+
     if (!clientId || !secret) {
+      console.log('Missing Plaid credentials - returning null values')
       return new Response(
         JSON.stringify({ 
           error: 'Plaid credentials not configured',
           client_id: null,
-          secret: null
+          secret: null,
+          debug: {
+            hasClientId: !!clientId,
+            hasSecret: !!secret
+          }
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -31,10 +43,12 @@ serve(async (req) => {
       )
     }
 
+    console.log('Returning Plaid credentials successfully')
     return new Response(
       JSON.stringify({
         client_id: clientId,
-        secret: secret
+        secret: secret,
+        success: true
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -42,6 +56,7 @@ serve(async (req) => {
       },
     )
   } catch (error) {
+    console.error('Error in get-plaid-credentials:', error)
     return new Response(
       JSON.stringify({ 
         error: error.message,
