@@ -33,7 +33,7 @@ serve(async (req) => {
     Transactions:
     ${transactionDescriptions}
     
-    Respond with a JSON array where each object has "description" and "category" fields. Match the description exactly as provided.
+    Respond with ONLY a JSON array where each object has "description" and "category" fields. Match the description exactly as provided. Do not include any markdown formatting or code blocks.
     
     Example format:
     [
@@ -52,7 +52,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are a financial transaction categorization expert. Always respond with valid JSON only.' },
+          { role: 'system', content: 'You are a financial transaction categorization expert. Always respond with valid JSON only, no markdown formatting.' },
           { role: 'user', content: prompt }
         ],
         temperature: 0.1,
@@ -107,15 +107,23 @@ serve(async (req) => {
       throw new Error('Invalid response from OpenAI API');
     }
 
-    const responseContent = data.choices[0].message.content.trim();
+    let responseContent = data.choices[0].message.content.trim();
     console.log('OpenAI response content:', responseContent);
+
+    // Clean up markdown formatting if present
+    if (responseContent.startsWith('```json')) {
+      responseContent = responseContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (responseContent.startsWith('```')) {
+      responseContent = responseContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
 
     let categorizations;
     try {
-      // Try to parse the JSON response
+      // Try to parse the cleaned JSON response
       categorizations = JSON.parse(responseContent);
     } catch (parseError) {
       console.error('Failed to parse OpenAI response as JSON:', parseError);
+      console.error('Response content was:', responseContent);
       throw new Error('Invalid JSON response from OpenAI');
     }
 
