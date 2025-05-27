@@ -40,11 +40,9 @@ const ConnectedAccounts = () => {
   };
 
   const handleConnectSuccess = async (accessToken: string) => {
-    handlePlaidSuccess(accessToken);
+    console.log('Connect success - passing token to handlePlaidSuccess:', accessToken.substring(0, 20) + '...');
+    await handlePlaidSuccess(accessToken);
     setShowConnectNew(false);
-    
-    // Trigger data fetch after successful connection
-    await fetchPlaidData();
     
     toast({
       title: "Account Connected",

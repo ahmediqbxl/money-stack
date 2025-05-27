@@ -45,19 +45,20 @@ export const usePlaidData = () => {
     }
   }, []);
 
-  const fetchPlaidData = useCallback(async () => {
-    const currentToken = plaidAccessToken || localStorage.getItem('plaid_access_token');
+  const fetchPlaidData = useCallback(async (accessToken?: string) => {
+    // Use provided token or stored token
+    const tokenToUse = accessToken || plaidAccessToken || localStorage.getItem('plaid_access_token');
     
-    if (!currentToken || isLoading) {
-      console.log('Cannot fetch Plaid data:', { hasToken: !!currentToken, isLoading });
+    if (!tokenToUse || isLoading) {
+      console.log('Cannot fetch Plaid data:', { hasToken: !!tokenToUse, isLoading });
       return;
     }
     
-    console.log('Starting Plaid data fetch...');
+    console.log('Starting Plaid data fetch with token:', tokenToUse.substring(0, 20) + '...');
     setIsLoading(true);
     
     try {
-      const data = await plaidService.getAccountsAndTransactions(currentToken);
+      const data = await plaidService.getAccountsAndTransactions(tokenToUse);
       console.log('Plaid data received:', data);
       
       // Save accounts to database with better duplicate checking
@@ -122,11 +123,14 @@ export const usePlaidData = () => {
     }
   }, [plaidAccessToken, isLoading, saveAccount, saveTransactions, toast]);
 
-  const handlePlaidSuccess = (accessToken: string) => {
-    console.log('Plaid success, storing token:', accessToken);
+  const handlePlaidSuccess = async (accessToken: string) => {
+    console.log('Plaid success, storing token and immediately fetching data:', accessToken.substring(0, 20) + '...');
     localStorage.setItem('plaid_access_token', accessToken);
     setPlaidAccessToken(accessToken);
     setHasFetched(false); // Reset to allow fetching with new token
+    
+    // Immediately fetch data with the new token
+    await fetchPlaidData(accessToken);
   };
 
   const categorizeTransactions = async () => {
