@@ -191,12 +191,11 @@ const Index = () => {
 
         {/* Main Content */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
             <TabsTrigger value="budgets">Budgets</TabsTrigger>
             <TabsTrigger value="insights">AI Insights</TabsTrigger>
-            <TabsTrigger value="manage">Manage</TabsTrigger>
             <TabsTrigger value="trends">Trends</TabsTrigger>
           </TabsList>
 
@@ -323,18 +322,6 @@ const Index = () => {
                 </Card>
               ))}
             </div>
-          </TabsContent>
-
-          <TabsContent value="manage" className="space-y-6">
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle>Transaction Management</CardTitle>
-                <CardDescription>Search, filter, and organize your transactions</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <TransactionManager />
-              </CardContent>
-            </Card>
           </TabsContent>
 
           <TabsContent value="trends" className="space-y-6">

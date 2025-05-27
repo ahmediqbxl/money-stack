@@ -5,24 +5,46 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Search, Filter, Calendar } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Search, Filter, Calendar, Edit, MoreHorizontal } from 'lucide-react';
 import { useFlinksData } from '@/hooks/useFlinksData';
+import { useToast } from '@/hooks/use-toast';
 
 const TransactionManager = () => {
   const { transactions, isLoading } = useFlinksData();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('date');
+  const [localTransactions, setLocalTransactions] = useState(transactions);
+  const { toast } = useToast();
 
-  // Get unique categories
-  const categories = useMemo(() => {
-    const uniqueCategories = [...new Set(transactions.map(t => t.category).filter(Boolean))];
-    return ['all', ...uniqueCategories];
+  // Update local transactions when data changes
+  useMemo(() => {
+    setLocalTransactions(transactions);
   }, [transactions]);
+
+  // Available categories for manual assignment
+  const availableCategories = [
+    'Food & Dining',
+    'Transportation',
+    'Shopping',
+    'Entertainment',
+    'Bills & Utilities',
+    'Healthcare',
+    'Income',
+    'Uncategorized'
+  ];
+
+  // Get unique categories from transactions
+  const categories = useMemo(() => {
+    const uniqueCategories = [...new Set(localTransactions.map(t => t.category).filter(Boolean))];
+    return ['all', ...uniqueCategories];
+  }, [localTransactions]);
 
   // Filter and sort transactions
   const filteredTransactions = useMemo(() => {
-    let filtered = transactions.filter(transaction => {
+    let filtered = localTransactions.filter(transaction => {
       const matchesSearch = 
         transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (transaction.merchant && transaction.merchant.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -47,21 +69,22 @@ const TransactionManager = () => {
     });
 
     return filtered;
-  }, [transactions, searchTerm, selectedCategory, sortBy]);
+  }, [localTransactions, searchTerm, selectedCategory, sortBy]);
 
-  // Group transactions by category
-  const transactionsByCategory = useMemo(() => {
-    const grouped = filteredTransactions.reduce((acc, transaction) => {
-      const category = transaction.category || 'Uncategorized';
-      if (!acc[category]) {
-        acc[category] = [];
-      }
-      acc[category].push(transaction);
-      return acc;
-    }, {} as Record<string, typeof transactions>);
-
-    return grouped;
-  }, [filteredTransactions]);
+  const handleCategoryChange = (transactionId: string, newCategory: string) => {
+    setLocalTransactions(prev => 
+      prev.map(transaction => 
+        transaction.id === transactionId 
+          ? { ...transaction, category: newCategory }
+          : transaction
+      )
+    );
+    
+    toast({
+      title: "Category Updated",
+      description: `Transaction categorized as ${newCategory}`,
+    });
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-CA', {
@@ -98,7 +121,7 @@ const TransactionManager = () => {
             Transaction Manager
           </CardTitle>
           <CardDescription>
-            Search and organize your transactions by category
+            Search, organize, and categorize your transactions
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -142,7 +165,7 @@ const TransactionManager = () => {
 
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-gray-600">
-              Showing {filteredTransactions.length} of {transactions.length} transactions
+              Showing {filteredTransactions.length} of {localTransactions.length} transactions
             </p>
             {(searchTerm || selectedCategory !== 'all') && (
               <Button
@@ -160,106 +183,101 @@ const TransactionManager = () => {
         </CardContent>
       </Card>
 
-      {selectedCategory === 'all' ? (
-        // Group view by category
-        <div className="space-y-4">
-          {Object.entries(transactionsByCategory).map(([category, categoryTransactions]) => (
-            <Card key={category}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{category}</CardTitle>
-                  <Badge variant="secondary">
-                    {categoryTransactions.length} transactions
-                  </Badge>
-                </div>
-                <CardDescription>
-                  Total: {formatCurrency(categoryTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0))}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {categoryTransactions.map((transaction) => (
-                    <div key={transaction.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">{transaction.description}</p>
-                        <p className="text-xs text-gray-500">
-                          {transaction.merchant && `${transaction.merchant} • `}
-                          {formatDate(transaction.date)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-medium text-sm ${
-                          transaction.amount > 0 ? 'text-green-600' : 'text-gray-900'
-                        }`}>
-                          {transaction.amount > 0 ? '+' : '-'}{formatCurrency(transaction.amount)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        // List view for specific category or search results
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {selectedCategory !== 'all' ? `${selectedCategory} Transactions` : 'Search Results'}
-            </CardTitle>
-            <CardDescription>
-              {filteredTransactions.length} transactions found
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {filteredTransactions.map((transaction) => (
-                <div key={transaction.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{transaction.description}</p>
-                    <p className="text-xs text-gray-500">
-                      {transaction.merchant && `${transaction.merchant} • `}
-                      {transaction.category && (
-                        <Badge variant="outline" className="text-xs mr-2">{transaction.category}</Badge>
-                      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>All Transactions</CardTitle>
+          <CardDescription>
+            {filteredTransactions.length} transactions • Click on categories to edit
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Merchant</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="w-12"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredTransactions.map((transaction) => (
+                  <TableRow key={transaction.id} className="hover:bg-gray-50">
+                    <TableCell className="font-medium">
+                      {transaction.description}
+                    </TableCell>
+                    <TableCell className="text-gray-600">
+                      {transaction.merchant || '-'}
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={transaction.category || 'Uncategorized'}
+                        onValueChange={(value) => handleCategoryChange(transaction.id, value)}
+                      >
+                        <SelectTrigger className="w-40 h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableCategories.map(category => (
+                            <SelectItem key={category} value={category}>
+                              {category}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell className="text-gray-600">
                       {formatDate(transaction.date)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`font-medium text-sm ${
+                    </TableCell>
+                    <TableCell className={`text-right font-medium ${
                       transaction.amount > 0 ? 'text-green-600' : 'text-gray-900'
                     }`}>
                       {transaction.amount > 0 ? '+' : '-'}{formatCurrency(transaction.amount)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit Transaction
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
-      {filteredTransactions.length === 0 && (
-        <Card className="border-dashed border-2 border-gray-300">
-          <CardContent className="py-8 text-center">
-            <Filter className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No transactions found</h3>
-            <p className="text-gray-500 mb-4">
-              Try adjusting your search terms or category filters
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedCategory('all');
-              }}
-            >
-              Clear All Filters
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+          {filteredTransactions.length === 0 && (
+            <div className="text-center py-8">
+              <Filter className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No transactions found</h3>
+              <p className="text-gray-500 mb-4">
+                Try adjusting your search terms or category filters
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedCategory('all');
+                }}
+              >
+                Clear All Filters
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
