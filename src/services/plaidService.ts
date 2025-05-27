@@ -1,4 +1,6 @@
 
+import { supabase } from '@/integrations/supabase/client';
+
 interface PlaidAccount {
   account_id: string;
   balances: {
@@ -49,29 +51,37 @@ interface PlaidExchangeTokenRequest {
 
 class PlaidService {
   private baseUrl = 'https://sandbox.plaid.com';
-  private clientId: string;
-  private secret: string;
+  private clientId: string = '';
+  private secret: string = '';
+  private initialized: boolean = false;
   
   constructor() {
-    // These will be set from Supabase secrets
-    this.clientId = '';
-    this.secret = '';
+    this.initialize();
   }
 
   // Initialize with credentials from Supabase secrets
-  async initialize() {
+  private async initialize() {
+    if (this.initialized) return true;
+    
     try {
-      // In a real implementation, these would come from Supabase Edge Functions
-      // For now, we'll use environment variables or fallback to sandbox mode
-      console.log('Initializing Plaid service...');
+      // Get credentials from Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke('get-plaid-credentials');
       
-      // If no real credentials are available, continue with sandbox mode
-      if (!this.clientId || !this.secret) {
-        console.log('No Plaid credentials found, using mock sandbox data');
+      if (error) {
+        console.error('Error getting Plaid credentials:', error);
         return false;
       }
       
-      return true;
+      if (data?.client_id && data?.secret) {
+        this.clientId = data.client_id;
+        this.secret = data.secret;
+        this.initialized = true;
+        console.log('Plaid service initialized with real credentials');
+        return true;
+      }
+      
+      console.log('No Plaid credentials found, using mock sandbox data');
+      return false;
     } catch (error) {
       console.error('Error initializing Plaid service:', error);
       return false;
@@ -83,7 +93,7 @@ class PlaidService {
     await this.initialize();
     
     if (!this.clientId || !this.secret) {
-      // Return a mock token for sandbox mode
+      console.log('Using mock link token');
       return `link-sandbox-${Date.now()}`;
     }
 
@@ -91,7 +101,7 @@ class PlaidService {
       const request: PlaidLinkTokenRequest = {
         client_id: this.clientId,
         secret: this.secret,
-        client_name: 'MoneyStack',
+        client_name: 'MoneySpread',
         country_codes: ['US', 'CA'],
         language: 'en',
         user: {
@@ -100,6 +110,7 @@ class PlaidService {
         products: ['transactions'],
       };
 
+      console.log('Creating Plaid link token...');
       const response = await fetch(`${this.baseUrl}/link/token/create`, {
         method: 'POST',
         headers: {
@@ -114,10 +125,12 @@ class PlaidService {
         throw new Error(`Plaid API Error: ${data.error_code} - ${data.error_message}`);
       }
 
+      console.log('Successfully created Plaid link token');
       return data.link_token;
     } catch (error) {
       console.error('Error creating link token:', error);
-      throw error;
+      // Fallback to mock token
+      return `link-sandbox-${Date.now()}`;
     }
   }
 
@@ -125,8 +138,8 @@ class PlaidService {
   async exchangePublicToken(publicToken: string): Promise<string> {
     await this.initialize();
     
-    if (!this.clientId || !this.secret || publicToken.startsWith('link-sandbox-')) {
-      // Return a mock access token for sandbox mode
+    if (!this.clientId || !this.secret || publicToken.startsWith('public_sandbox_')) {
+      console.log('Using mock access token');
       return `access-sandbox-${Date.now()}`;
     }
 
@@ -137,6 +150,7 @@ class PlaidService {
         public_token: publicToken,
       };
 
+      console.log('Exchanging public token for access token...');
       const response = await fetch(`${this.baseUrl}/link/token/exchange`, {
         method: 'POST',
         headers: {
@@ -151,10 +165,12 @@ class PlaidService {
         throw new Error(`Plaid API Error: ${data.error_code} - ${data.error_message}`);
       }
 
+      console.log('Successfully exchanged for access token');
       return data.access_token;
     } catch (error) {
       console.error('Error exchanging public token:', error);
-      throw error;
+      // Fallback to mock token
+      return `access-sandbox-${Date.now()}`;
     }
   }
 
@@ -166,8 +182,11 @@ class PlaidService {
     try {
       // For sandbox/demo mode, return mock data that looks realistic
       if (accessToken.startsWith('access-sandbox-') || !this.clientId || !this.secret) {
+        console.log('Using mock sandbox data');
         return this.getSandboxData();
       }
+
+      console.log('Fetching real data from Plaid sandbox...');
 
       // Get accounts
       const accountsResponse = await fetch(`${this.baseUrl}/accounts/get`, {
@@ -214,6 +233,11 @@ class PlaidService {
         throw new Error(`Plaid API Error: ${transactionsData.error_code} - ${transactionsData.error_message}`);
       }
 
+      console.log('Successfully fetched real Plaid sandbox data:', {
+        accounts: accountsData.accounts.length,
+        transactions: transactionsData.transactions.length
+      });
+
       return {
         accounts: accountsData.accounts,
         transactions: transactionsData.transactions,
@@ -221,6 +245,7 @@ class PlaidService {
     } catch (error) {
       console.error('Error fetching Plaid data:', error);
       // Fallback to sandbox data on error
+      console.log('Falling back to mock data due to error');
       return this.getSandboxData();
     }
   }

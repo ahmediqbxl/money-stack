@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,23 +9,52 @@ interface PlaidConnectProps {
   onSuccess?: (accessToken: string) => void;
 }
 
+declare global {
+  interface Window {
+    Plaid: {
+      create: (config: any) => {
+        open: () => void;
+        destroy: () => void;
+      };
+    };
+  }
+}
+
 const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [isPlaidLoaded, setIsPlaidLoaded] = useState(false);
   const { user } = useAuth();
 
+  // Check if Plaid SDK is loaded
+  useEffect(() => {
+    const checkPlaidLoaded = () => {
+      if (window.Plaid) {
+        setIsPlaidLoaded(true);
+      } else {
+        // Keep checking until Plaid is loaded
+        setTimeout(checkPlaidLoaded, 100);
+      }
+    };
+    
+    checkPlaidLoaded();
+  }, []);
+
   const handleConnectBank = async () => {
+    if (!linkToken || !isPlaidLoaded) {
+      console.log('Cannot connect: missing link token or Plaid not loaded');
+      return;
+    }
+
     setIsConnecting(true);
     
     try {
-      // For sandbox mode, simulate the flow
-      if (!linkToken || linkToken.startsWith('link-sandbox-')) {
-        // Simulate Plaid Link flow for sandbox
+      if (linkToken.startsWith('link-sandbox-')) {
+        // Fallback to mock flow if still using sandbox token
         setTimeout(async () => {
           const mockPublicToken = `public_sandbox_${Date.now()}`;
           console.log('Mock Plaid connection successful, public token:', mockPublicToken);
           
-          // Exchange for access token
           const accessToken = await plaidService.exchangePublicToken(mockPublicToken);
           console.log('Exchanged for access token:', accessToken);
           
@@ -39,25 +67,35 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
         return;
       }
 
-      // For real Plaid integration, you would load and initialize Plaid Link here
-      // This requires the Plaid Link SDK to be loaded
-      console.log('Initializing Plaid Link with token:', linkToken);
-      
-      // Placeholder for real Plaid Link initialization
-      // In a real implementation, you would use:
-      // const linkHandler = Plaid.create({
-      //   token: linkToken,
-      //   onSuccess: async (public_token, metadata) => {
-      //     const accessToken = await plaidService.exchangePublicToken(public_token);
-      //     if (onSuccess) {
-      //       onSuccess(accessToken);
-      //     }
-      //   },
-      //   onExit: () => {
-      //     setIsConnecting(false);
-      //   }
-      // });
-      // linkHandler.open();
+      // Use real Plaid Link
+      const linkHandler = window.Plaid.create({
+        token: linkToken,
+        onSuccess: async (public_token: string, metadata: any) => {
+          console.log('Plaid Link success:', { public_token, metadata });
+          
+          try {
+            const accessToken = await plaidService.exchangePublicToken(public_token);
+            console.log('Exchanged for access token:', accessToken);
+            
+            if (onSuccess) {
+              onSuccess(accessToken);
+            }
+          } catch (error) {
+            console.error('Error exchanging token:', error);
+          }
+          
+          setIsConnecting(false);
+        },
+        onExit: (err: any, metadata: any) => {
+          console.log('Plaid Link exit:', { err, metadata });
+          setIsConnecting(false);
+        },
+        onEvent: (eventName: string, metadata: any) => {
+          console.log('Plaid Link event:', { eventName, metadata });
+        },
+      });
+
+      linkHandler.open();
       
     } catch (error) {
       console.error('Error connecting to Plaid:', error);
@@ -121,6 +159,9 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
     };
   }, [onSuccess]);
 
+  const canConnect = linkToken && isPlaidLoaded;
+  const isUsingSandbox = linkToken?.startsWith('link-sandbox-');
+
   return (
     <>
       <Card className="border-dashed border-2 border-gray-300 hover:border-blue-400 transition-colors">
@@ -136,17 +177,19 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
         <CardContent className="text-center">
           <Button 
             onClick={handleConnectBank}
-            disabled={isConnecting || !linkToken}
+            disabled={isConnecting || !canConnect}
             className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
           >
             {isConnecting ? 'Connecting...' : 'Connect Bank Account'}
           </Button>
           <p className="text-sm text-gray-500 mt-2">
-            {isConnecting 
-              ? 'Connecting via Plaid...' 
-              : linkToken?.startsWith('link-sandbox-')
-                ? 'Sandbox Mode - Demo data will be used'
-                : 'Powered by Plaid - Trusted by thousands of financial apps'
+            {!isPlaidLoaded 
+              ? 'Loading Plaid SDK...'
+              : isConnecting 
+                ? 'Connecting via Plaid...' 
+                : isUsingSandbox
+                  ? 'Sandbox Mode - Demo data will be used'
+                  : 'Powered by Plaid - Ready for sandbox testing'
             }
           </p>
         </CardContent>
@@ -157,7 +200,12 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
           <Card className="w-96">
             <CardHeader className="text-center">
               <CardTitle>Connecting via Plaid</CardTitle>
-              <CardDescription>Please wait while we establish a secure connection...</CardDescription>
+              <CardDescription>
+                {isUsingSandbox 
+                  ? 'Please wait while we establish a demo connection...'
+                  : 'Please complete the connection in the Plaid Link window...'
+                }
+              </CardDescription>
             </CardHeader>
             <CardContent className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
