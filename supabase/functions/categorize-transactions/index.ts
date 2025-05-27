@@ -110,12 +110,16 @@ serve(async (req) => {
     let responseContent = data.choices[0].message.content.trim();
     console.log('OpenAI response content:', responseContent);
 
-    // Clean up markdown formatting if present
-    if (responseContent.startsWith('```json')) {
-      responseContent = responseContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (responseContent.startsWith('```')) {
-      responseContent = responseContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
+    // More robust markdown cleanup that handles newlines and various formats
+    responseContent = responseContent
+      .replace(/^```json\s*/g, '')  // Remove opening ```json with optional whitespace
+      .replace(/^```\s*/g, '')      // Remove opening ``` with optional whitespace
+      .replace(/\s*```$/g, '')      // Remove closing ``` with optional whitespace
+      .replace(/^\s*[\r\n]+/g, '')  // Remove leading newlines
+      .replace(/[\r\n]+\s*$/g, '')  // Remove trailing newlines
+      .trim();
+
+    console.log('Cleaned response content:', responseContent);
 
     let categorizations;
     try {
@@ -123,8 +127,42 @@ serve(async (req) => {
       categorizations = JSON.parse(responseContent);
     } catch (parseError) {
       console.error('Failed to parse OpenAI response as JSON:', parseError);
-      console.error('Response content was:', responseContent);
-      throw new Error('Invalid JSON response from OpenAI');
+      console.error('Cleaned response content was:', responseContent);
+      
+      // Fallback to rule-based categorization if JSON parsing fails
+      console.log('Falling back to rule-based categorization due to parse error');
+      const categorizedTransactions = transactions.map((transaction: any) => {
+        const description = transaction.description.toLowerCase();
+        const merchant = (transaction.merchant || '').toLowerCase();
+        
+        let category = 'Other';
+        
+        if (description.includes('grocery') || description.includes('food') || merchant.includes('restaurant') || merchant.includes('tim hortons') || merchant.includes('mcdonald') || description.includes('metro')) {
+          category = 'Food & Dining';
+        } else if (description.includes('uber') || description.includes('taxi') || description.includes('transit') || description.includes('gas') || merchant.includes('shell') || description.includes('ttc')) {
+          category = 'Transportation';
+        } else if (description.includes('amazon') || description.includes('shop') || merchant.includes('canadian tire') || description.includes('target')) {
+          category = 'Shopping';
+        } else if (description.includes('netflix') || description.includes('spotify') || description.includes('entertainment')) {
+          category = 'Entertainment';
+        } else if (description.includes('hydro') || description.includes('bell') || description.includes('rogers') || description.includes('utility') || description.includes('bill')) {
+          category = 'Bills & Utilities';
+        } else if (description.includes('pharmacy') || description.includes('drug mart') || description.includes('medical')) {
+          category = 'Healthcare';
+        } else if (description.includes('deposit') || description.includes('salary') || description.includes('payroll') || transaction.amount > 0) {
+          category = 'Income';
+        }
+        
+        return {
+          ...transaction,
+          category: category
+        };
+      });
+
+      return new Response(
+        JSON.stringify({ categorizedTransactions }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Match categorizations with original transactions
