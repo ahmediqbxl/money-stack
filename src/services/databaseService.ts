@@ -1,6 +1,4 @@
-
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 
 export interface DatabaseAccount {
   id: string;
@@ -49,7 +47,11 @@ class DatabaseService {
       throw error;
     }
 
-    return data || [];
+    // Type assertion to handle the provider field correctly
+    return (data || []).map(account => ({
+      ...account,
+      provider: account.provider as 'plaid' | 'flinks'
+    }));
   }
 
   async saveAccount(account: Omit<DatabaseAccount, 'id'>): Promise<DatabaseAccount> {
@@ -58,11 +60,9 @@ class DatabaseService {
 
     const { data, error } = await supabase
       .from('accounts')
-      .upsert({
+      .insert({
         ...account,
         user_id: user.id,
-      }, {
-        onConflict: 'external_account_id,user_id'
       })
       .select()
       .single();
@@ -72,7 +72,11 @@ class DatabaseService {
       throw error;
     }
 
-    return data;
+    // Type assertion to handle the provider field correctly
+    return {
+      ...data,
+      provider: data.provider as 'plaid' | 'flinks'
+    };
   }
 
   async deleteAccount(accountId: string): Promise<void> {
