@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Building2, X } from 'lucide-react';
+import { plaidService } from '@/services/plaidService';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface PlaidConnectProps {
   onSuccess?: (accessToken: string) => void;
@@ -10,26 +12,81 @@ interface PlaidConnectProps {
 
 const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const { user } = useAuth();
 
-  const handleConnectBank = () => {
+  const handleConnectBank = async () => {
     setIsConnecting(true);
     
-    // Simulate Plaid Link flow for sandbox
-    setTimeout(() => {
-      const mockAccessToken = `sandbox_access_token_${Date.now()}`;
-      console.log('Mock Plaid connection successful, access token:', mockAccessToken);
-      
-      if (onSuccess) {
-        onSuccess(mockAccessToken);
+    try {
+      // For sandbox mode, simulate the flow
+      if (!linkToken || linkToken.startsWith('link-sandbox-')) {
+        // Simulate Plaid Link flow for sandbox
+        setTimeout(async () => {
+          const mockPublicToken = `public_sandbox_${Date.now()}`;
+          console.log('Mock Plaid connection successful, public token:', mockPublicToken);
+          
+          // Exchange for access token
+          const accessToken = await plaidService.exchangePublicToken(mockPublicToken);
+          console.log('Exchanged for access token:', accessToken);
+          
+          if (onSuccess) {
+            onSuccess(accessToken);
+          }
+          
+          setIsConnecting(false);
+        }, 2000);
+        return;
       }
+
+      // For real Plaid integration, you would load and initialize Plaid Link here
+      // This requires the Plaid Link SDK to be loaded
+      console.log('Initializing Plaid Link with token:', linkToken);
       
+      // Placeholder for real Plaid Link initialization
+      // In a real implementation, you would use:
+      // const linkHandler = Plaid.create({
+      //   token: linkToken,
+      //   onSuccess: async (public_token, metadata) => {
+      //     const accessToken = await plaidService.exchangePublicToken(public_token);
+      //     if (onSuccess) {
+      //       onSuccess(accessToken);
+      //     }
+      //   },
+      //   onExit: () => {
+      //     setIsConnecting(false);
+      //   }
+      // });
+      // linkHandler.open();
+      
+    } catch (error) {
+      console.error('Error connecting to Plaid:', error);
       setIsConnecting(false);
-    }, 2000);
+    }
   };
 
   const handleCloseConnect = () => {
     setIsConnecting(false);
   };
+
+  // Create link token on component mount
+  useEffect(() => {
+    const createLinkToken = async () => {
+      if (user) {
+        try {
+          const token = await plaidService.createLinkToken(user.id);
+          setLinkToken(token);
+          console.log('Created link token:', token);
+        } catch (error) {
+          console.error('Error creating link token:', error);
+          // Set a sandbox token as fallback
+          setLinkToken(`link-sandbox-${Date.now()}`);
+        }
+      }
+    };
+
+    createLinkToken();
+  }, [user]);
 
   useEffect(() => {
     // Listen for messages from Plaid Link (for real implementation)
@@ -43,10 +100,14 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
       if (event.data.type === 'success') {
         console.log('Bank connected successfully:', event.data);
         
-        const accessToken = event.data.public_token || event.data.data?.public_token;
-        if (accessToken && onSuccess) {
-          // In real implementation, you'd exchange public_token for access_token
-          onSuccess(accessToken);
+        const publicToken = event.data.public_token || event.data.data?.public_token;
+        if (publicToken && onSuccess) {
+          // Exchange public token for access token
+          plaidService.exchangePublicToken(publicToken).then(accessToken => {
+            onSuccess(accessToken);
+          }).catch(error => {
+            console.error('Error exchanging token:', error);
+          });
         }
         
         handleCloseConnect();
@@ -75,13 +136,18 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
         <CardContent className="text-center">
           <Button 
             onClick={handleConnectBank}
-            disabled={isConnecting}
+            disabled={isConnecting || !linkToken}
             className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
           >
             {isConnecting ? 'Connecting...' : 'Connect Bank Account'}
           </Button>
           <p className="text-sm text-gray-500 mt-2">
-            {isConnecting ? 'Connecting via Plaid...' : 'Powered by Plaid - Trusted by thousands of financial apps'}
+            {isConnecting 
+              ? 'Connecting via Plaid...' 
+              : linkToken?.startsWith('link-sandbox-')
+                ? 'Sandbox Mode - Demo data will be used'
+                : 'Powered by Plaid - Trusted by thousands of financial apps'
+            }
           </p>
         </CardContent>
       </Card>

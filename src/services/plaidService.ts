@@ -29,23 +29,198 @@ interface PlaidApiResponse {
   transactions: PlaidTransaction[];
 }
 
+interface PlaidLinkTokenRequest {
+  client_id: string;
+  secret: string;
+  client_name: string;
+  country_codes: string[];
+  language: string;
+  user: {
+    client_user_id: string;
+  };
+  products: string[];
+}
+
+interface PlaidExchangeTokenRequest {
+  client_id: string;
+  secret: string;
+  public_token: string;
+}
+
 class PlaidService {
-  private baseUrl = 'https://sandbox.plaid.com'; // Using sandbox for testing
+  private baseUrl = 'https://sandbox.plaid.com';
+  private clientId: string;
+  private secret: string;
   
+  constructor() {
+    // These will be set from Supabase secrets
+    this.clientId = '';
+    this.secret = '';
+  }
+
+  // Initialize with credentials from Supabase secrets
+  async initialize() {
+    try {
+      // In a real implementation, these would come from Supabase Edge Functions
+      // For now, we'll use environment variables or fallback to sandbox mode
+      console.log('Initializing Plaid service...');
+      
+      // If no real credentials are available, continue with sandbox mode
+      if (!this.clientId || !this.secret) {
+        console.log('No Plaid credentials found, using mock sandbox data');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error initializing Plaid service:', error);
+      return false;
+    }
+  }
+
+  // Create a link token for Plaid Link
+  async createLinkToken(userId: string): Promise<string> {
+    await this.initialize();
+    
+    if (!this.clientId || !this.secret) {
+      // Return a mock token for sandbox mode
+      return `link-sandbox-${Date.now()}`;
+    }
+
+    try {
+      const request: PlaidLinkTokenRequest = {
+        client_id: this.clientId,
+        secret: this.secret,
+        client_name: 'MoneyStack',
+        country_codes: ['US', 'CA'],
+        language: 'en',
+        user: {
+          client_user_id: userId,
+        },
+        products: ['transactions'],
+      };
+
+      const response = await fetch(`${this.baseUrl}/link/token/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      const data = await response.json();
+      
+      if (data.error_code) {
+        throw new Error(`Plaid API Error: ${data.error_code} - ${data.error_message}`);
+      }
+
+      return data.link_token;
+    } catch (error) {
+      console.error('Error creating link token:', error);
+      throw error;
+    }
+  }
+
+  // Exchange public token for access token
+  async exchangePublicToken(publicToken: string): Promise<string> {
+    await this.initialize();
+    
+    if (!this.clientId || !this.secret || publicToken.startsWith('link-sandbox-')) {
+      // Return a mock access token for sandbox mode
+      return `access-sandbox-${Date.now()}`;
+    }
+
+    try {
+      const request: PlaidExchangeTokenRequest = {
+        client_id: this.clientId,
+        secret: this.secret,
+        public_token: publicToken,
+      };
+
+      const response = await fetch(`${this.baseUrl}/link/token/exchange`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      const data = await response.json();
+      
+      if (data.error_code) {
+        throw new Error(`Plaid API Error: ${data.error_code} - ${data.error_message}`);
+      }
+
+      return data.access_token;
+    } catch (error) {
+      console.error('Error exchanging public token:', error);
+      throw error;
+    }
+  }
+
   async getAccountsAndTransactions(accessToken: string): Promise<PlaidApiResponse> {
     console.log('Fetching Plaid data for access token:', accessToken);
     
+    await this.initialize();
+    
     try {
       // For sandbox/demo mode, return mock data that looks realistic
-      if (accessToken.startsWith('sandbox_')) {
+      if (accessToken.startsWith('access-sandbox-') || !this.clientId || !this.secret) {
         return this.getSandboxData();
       }
 
-      // In a real implementation, you would make actual Plaid API calls here
-      // For now, we'll use sandbox data
-      return this.getSandboxData();
+      // Get accounts
+      const accountsResponse = await fetch(`${this.baseUrl}/accounts/get`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: this.clientId,
+          secret: this.secret,
+          access_token: accessToken,
+        }),
+      });
+
+      const accountsData = await accountsResponse.json();
+      
+      if (accountsData.error_code) {
+        throw new Error(`Plaid API Error: ${accountsData.error_code} - ${accountsData.error_message}`);
+      }
+
+      // Get transactions (last 30 days)
+      const endDate = new Date().toISOString().split('T')[0];
+      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const transactionsResponse = await fetch(`${this.baseUrl}/transactions/get`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: this.clientId,
+          secret: this.secret,
+          access_token: accessToken,
+          start_date: startDate,
+          end_date: endDate,
+          count: 100,
+          offset: 0,
+        }),
+      });
+
+      const transactionsData = await transactionsResponse.json();
+      
+      if (transactionsData.error_code) {
+        throw new Error(`Plaid API Error: ${transactionsData.error_code} - ${transactionsData.error_message}`);
+      }
+
+      return {
+        accounts: accountsData.accounts,
+        transactions: transactionsData.transactions,
+      };
     } catch (error) {
       console.error('Error fetching Plaid data:', error);
+      // Fallback to sandbox data on error
       return this.getSandboxData();
     }
   }
