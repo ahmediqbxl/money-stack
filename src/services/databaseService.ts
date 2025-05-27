@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 export interface DatabaseAccount {
@@ -57,6 +58,23 @@ class DatabaseService {
   async saveAccount(account: Omit<DatabaseAccount, 'id'>): Promise<DatabaseAccount> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
+
+    // Check if account already exists in database
+    const { data: existingAccount } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('external_account_id', account.external_account_id)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .single();
+
+    if (existingAccount) {
+      console.log('Account already exists in database:', existingAccount);
+      return {
+        ...existingAccount,
+        provider: existingAccount.provider as 'plaid' | 'flinks'
+      };
+    }
 
     const { data, error } = await supabase
       .from('accounts')

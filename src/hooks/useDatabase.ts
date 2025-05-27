@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { databaseService, DatabaseAccount, DatabaseTransaction, DatabaseCategory } from '@/services/databaseService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -49,16 +50,17 @@ export const useDatabase = () => {
 
   const saveAccount = async (account: Omit<DatabaseAccount, 'id'>) => {
     try {
-      // Check if account already exists
-      const existingAccount = accounts.find(a => a.external_account_id === account.external_account_id);
-      
-      if (existingAccount) {
-        console.log('Account already exists:', existingAccount);
-        return existingAccount;
-      }
-
       const savedAccount = await databaseService.saveAccount(account);
-      setAccounts(prev => [...prev, savedAccount]);
+      
+      // Only add to local state if it's not already there
+      setAccounts(prev => {
+        const exists = prev.some(a => a.external_account_id === savedAccount.external_account_id);
+        if (exists) {
+          return prev;
+        }
+        return [...prev, savedAccount];
+      });
+      
       return savedAccount;
     } catch (error) {
       console.error('Error saving account:', error);
