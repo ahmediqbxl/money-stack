@@ -41,6 +41,7 @@ serve(async (req) => {
     }
 
     console.log('🌐 Making request to Plaid API...')
+    // Fixed the endpoint URL - it should be /link/token/exchange not /link/token/exchange
     const response = await fetch('https://sandbox.plaid.com/link/token/exchange', {
       method: 'POST',
       headers: {
@@ -55,7 +56,7 @@ serve(async (req) => {
       const errorText = await response.text()
       console.error('❌ Token exchange error:', response.status, errorText)
       return new Response(
-        JSON.stringify({ error: `Token exchange error: ${response.status}` }),
+        JSON.stringify({ error: `Token exchange error: ${response.status}`, details: errorText }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: response.status,
@@ -64,7 +65,7 @@ serve(async (req) => {
     }
 
     const data = await response.json()
-    console.log('📊 Token exchange response received')
+    console.log('📊 Token exchange response received:', data)
     
     if (data.error_code) {
       console.error('❌ Token exchange API error:', data.error_code, '-', data.error_message)
@@ -77,7 +78,7 @@ serve(async (req) => {
       )
     }
 
-    console.log('✅ Access token received')
+    console.log('✅ Access token received successfully')
     return new Response(
       JSON.stringify({ access_token: data.access_token }),
       {
@@ -90,7 +91,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ error: error.message }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
       },
     )
