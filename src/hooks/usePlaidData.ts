@@ -46,13 +46,19 @@ export const usePlaidData = () => {
   }, []);
 
   const fetchPlaidData = useCallback(async () => {
-    if (!plaidAccessToken || isLoading || hasFetched) return;
+    const currentToken = plaidAccessToken || localStorage.getItem('plaid_access_token');
     
+    if (!currentToken || isLoading) {
+      console.log('Cannot fetch Plaid data:', { hasToken: !!currentToken, isLoading });
+      return;
+    }
+    
+    console.log('Starting Plaid data fetch...');
     setIsLoading(true);
-    setHasFetched(true);
     
     try {
-      const data = await plaidService.getAccountsAndTransactions(plaidAccessToken);
+      const data = await plaidService.getAccountsAndTransactions(currentToken);
+      console.log('Plaid data received:', data);
       
       // Save accounts to database with better duplicate checking
       const accountPromises = data.accounts.map(async (account) => {
@@ -73,6 +79,7 @@ export const usePlaidData = () => {
       });
 
       const savedAccounts = await Promise.all(accountPromises);
+      console.log('Saved accounts:', savedAccounts);
 
       // Transform and save transactions with better duplicate handling
       const transformedTransactions = data.transactions.map(transaction => {
@@ -93,9 +100,12 @@ export const usePlaidData = () => {
       }).filter(t => t.account_id); // Filter out transactions without valid account_id
 
       if (transformedTransactions.length > 0) {
-        await saveTransactions(transformedTransactions);
+        const savedTransactions = await saveTransactions(transformedTransactions);
+        console.log('Saved transactions:', savedTransactions);
       }
 
+      setHasFetched(true);
+      
       toast({
         title: "Accounts Updated",
         description: `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} transactions.`,
@@ -110,9 +120,10 @@ export const usePlaidData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [plaidAccessToken, isLoading, hasFetched, saveAccount, saveTransactions, toast]);
+  }, [plaidAccessToken, isLoading, saveAccount, saveTransactions, toast]);
 
   const handlePlaidSuccess = (accessToken: string) => {
+    console.log('Plaid success, storing token:', accessToken);
     localStorage.setItem('plaid_access_token', accessToken);
     setPlaidAccessToken(accessToken);
     setHasFetched(false); // Reset to allow fetching with new token

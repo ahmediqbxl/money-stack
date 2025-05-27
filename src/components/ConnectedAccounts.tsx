@@ -39,9 +39,13 @@ const ConnectedAccounts = () => {
     }
   };
 
-  const handleConnectSuccess = (accessToken: string) => {
+  const handleConnectSuccess = async (accessToken: string) => {
     handlePlaidSuccess(accessToken);
     setShowConnectNew(false);
+    
+    // Trigger data fetch after successful connection
+    await fetchPlaidData();
+    
     toast({
       title: "Account Connected",
       description: "Your bank account has been successfully connected via Plaid!",
