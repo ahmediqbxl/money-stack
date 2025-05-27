@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Building2, X } from 'lucide-react';
+import { Building2, X, AlertCircle } from 'lucide-react';
 import { plaidService } from '@/services/plaidService';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 interface PlaidConnectProps {
   onSuccess?: (accessToken: string) => void;
@@ -24,7 +25,9 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [isPlaidLoaded, setIsPlaidLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const { toast } = useToast();
 
   // Check if Plaid SDK is loaded
   useEffect(() => {
@@ -47,26 +50,9 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
     }
 
     setIsConnecting(true);
+    setError(null);
     
     try {
-      if (linkToken.startsWith('link-sandbox-')) {
-        // Fallback to mock flow if still using sandbox token
-        setTimeout(async () => {
-          const mockPublicToken = `public_sandbox_${Date.now()}`;
-          console.log('Mock Plaid connection successful, public token:', mockPublicToken);
-          
-          const accessToken = await plaidService.exchangePublicToken(mockPublicToken);
-          console.log('Exchanged for access token:', accessToken);
-          
-          if (onSuccess) {
-            onSuccess(accessToken);
-          }
-          
-          setIsConnecting(false);
-        }, 2000);
-        return;
-      }
-
       // Use real Plaid Link
       const linkHandler = window.Plaid.create({
         token: linkToken,
@@ -80,14 +66,28 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
             if (onSuccess) {
               onSuccess(accessToken);
             }
+            
+            toast({
+              title: "Success!",
+              description: "Bank account connected successfully via Plaid.",
+            });
           } catch (error) {
             console.error('Error exchanging token:', error);
+            setError(`Failed to exchange token: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            toast({
+              title: "Error",
+              description: "Failed to complete bank connection.",
+              variant: "destructive",
+            });
           }
           
           setIsConnecting(false);
         },
         onExit: (err: any, metadata: any) => {
           console.log('Plaid Link exit:', { err, metadata });
+          if (err) {
+            setError(`Plaid Link error: ${err.error_message || 'Unknown error'}`);
+          }
           setIsConnecting(false);
         },
         onEvent: (eventName: string, metadata: any) => {
@@ -99,12 +99,14 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
       
     } catch (error) {
       console.error('Error connecting to Plaid:', error);
+      setError(`Connection error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsConnecting(false);
     }
   };
 
   const handleCloseConnect = () => {
     setIsConnecting(false);
+    setError(null);
   };
 
   // Create link token on component mount
@@ -112,13 +114,13 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
     const createLinkToken = async () => {
       if (user) {
         try {
+          setError(null);
           const token = await plaidService.createLinkToken(user.id);
           setLinkToken(token);
           console.log('Created link token:', token);
         } catch (error) {
           console.error('Error creating link token:', error);
-          // Set a sandbox token as fallback
-          setLinkToken(`link-sandbox-${Date.now()}`);
+          setError(`Failed to initialize Plaid: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
     };
@@ -126,41 +128,7 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
     createLinkToken();
   }, [user]);
 
-  useEffect(() => {
-    // Listen for messages from Plaid Link (for real implementation)
-    const handlePlaidMessage = (event: MessageEvent) => {
-      console.log('Plaid Link Event:', event.data);
-      
-      if (event.data.type === 'close') {
-        handleCloseConnect();
-      }
-      
-      if (event.data.type === 'success') {
-        console.log('Bank connected successfully:', event.data);
-        
-        const publicToken = event.data.public_token || event.data.data?.public_token;
-        if (publicToken && onSuccess) {
-          // Exchange public token for access token
-          plaidService.exchangePublicToken(publicToken).then(accessToken => {
-            onSuccess(accessToken);
-          }).catch(error => {
-            console.error('Error exchanging token:', error);
-          });
-        }
-        
-        handleCloseConnect();
-      }
-    };
-
-    window.addEventListener('message', handlePlaidMessage);
-    
-    return () => {
-      window.removeEventListener('message', handlePlaidMessage);
-    };
-  }, [onSuccess]);
-
-  const canConnect = linkToken && isPlaidLoaded;
-  const isUsingSandbox = linkToken?.startsWith('link-sandbox-');
+  const canConnect = linkToken && isPlaidLoaded && !error;
 
   return (
     <>
@@ -175,6 +143,16 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
           </CardDescription>
         </CardHeader>
         <CardContent className="text-center">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2">
+              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+              <div className="text-left">
+                <p className="text-sm font-medium text-red-800">Connection Error</p>
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            </div>
+          )}
+          
           <Button 
             onClick={handleConnectBank}
             disabled={isConnecting || !canConnect}
@@ -182,16 +160,23 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
           >
             {isConnecting ? 'Connecting...' : 'Connect Bank Account'}
           </Button>
+          
           <p className="text-sm text-gray-500 mt-2">
             {!isPlaidLoaded 
               ? 'Loading Plaid SDK...'
-              : isConnecting 
-                ? 'Connecting via Plaid...' 
-                : isUsingSandbox
-                  ? 'Sandbox Mode - Demo data will be used'
-                  : 'Powered by Plaid - Ready for sandbox testing'
+              : error
+                ? 'Please check configuration and try again'
+                : isConnecting 
+                  ? 'Connecting via Plaid...' 
+                  : 'Powered by Plaid - Real sandbox environment'
             }
           </p>
+          
+          {!error && (
+            <p className="text-xs text-gray-400 mt-2">
+              Use credentials: user_good / pass_good for testing
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -201,10 +186,7 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
             <CardHeader className="text-center">
               <CardTitle>Connecting via Plaid</CardTitle>
               <CardDescription>
-                {isUsingSandbox 
-                  ? 'Please wait while we establish a demo connection...'
-                  : 'Please complete the connection in the Plaid Link window...'
-                }
+                Please complete the connection in the Plaid Link window...
               </CardDescription>
             </CardHeader>
             <CardContent className="text-center">
