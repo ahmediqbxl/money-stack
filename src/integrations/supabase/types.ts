@@ -9,6 +9,84 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          account_number: string
+          account_type: string
+          balance: number | null
+          bank_name: string
+          connected_at: string | null
+          created_at: string | null
+          currency: string | null
+          external_account_id: string
+          id: string
+          is_active: boolean | null
+          last_synced_at: string | null
+          provider: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          account_number: string
+          account_type: string
+          balance?: number | null
+          bank_name: string
+          connected_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          external_account_id: string
+          id?: string
+          is_active?: boolean | null
+          last_synced_at?: string | null
+          provider: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          account_number?: string
+          account_type?: string
+          balance?: number | null
+          bank_name?: string
+          connected_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          external_account_id?: string
+          id?: string
+          is_active?: boolean | null
+          last_synced_at?: string | null
+          provider?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          color: string | null
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+          user_id: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          name: string
+          user_id?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -33,6 +111,99 @@ export type Database = {
           full_name?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          account_id: string
+          amount: number
+          category_id: string | null
+          category_name: string | null
+          created_at: string | null
+          date: string
+          description: string
+          external_transaction_id: string
+          id: string
+          is_manual_category: boolean | null
+          merchant: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          amount: number
+          category_id?: string | null
+          category_name?: string | null
+          created_at?: string | null
+          date: string
+          description: string
+          external_transaction_id: string
+          id?: string
+          is_manual_category?: boolean | null
+          merchant?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          amount?: number
+          category_id?: string | null
+          category_name?: string | null
+          created_at?: string | null
+          date?: string
+          description?: string
+          external_transaction_id?: string
+          id?: string
+          is_manual_category?: boolean | null
+          merchant?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_preferences: {
+        Row: {
+          auto_categorize: boolean | null
+          created_at: string | null
+          default_currency: string | null
+          id: string
+          notifications_enabled: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          auto_categorize?: boolean | null
+          created_at?: string | null
+          default_currency?: string | null
+          id?: string
+          notifications_enabled?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          auto_categorize?: boolean | null
+          created_at?: string | null
+          default_currency?: string | null
+          id?: string
+          notifications_enabled?: boolean | null
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }

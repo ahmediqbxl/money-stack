@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,10 +7,12 @@ import { Building2, Plus, Trash2, RefreshCw, Brain } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import PlaidConnect from './PlaidConnect';
 import { usePlaidData } from '@/hooks/usePlaidData';
+import { useDatabase } from '@/hooks/useDatabase';
 
 const ConnectedAccounts = () => {
   const [showConnectNew, setShowConnectNew] = useState(false);
   const { toast } = useToast();
+  const { deleteAccount } = useDatabase();
   const {
     accounts,
     transactions,
@@ -33,21 +36,15 @@ const ConnectedAccounts = () => {
 
   const handleRemoveAccount = async (accountId: string) => {
     try {
-      // In a real implementation, you would call Plaid API to disconnect
-      // For now, we'll just remove from local storage and refresh
-      localStorage.removeItem('plaid_access_token');
-      window.location.reload();
+      await deleteAccount(accountId);
       
-      toast({
-        title: "Account Removed",
-        description: "Bank account has been disconnected.",
-      });
+      // Also clean up localStorage if no accounts remain
+      const remainingAccounts = accounts.filter(a => a.id !== accountId);
+      if (remainingAccounts.length === 0) {
+        localStorage.removeItem('plaid_access_token');
+      }
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to remove account.",
-        variant: "destructive",
-      });
+      console.error('Error removing account:', error);
     }
   };
 
@@ -142,7 +139,7 @@ const ConnectedAccounts = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Badge variant="secondary">Connected via Plaid</Badge>
+                  <Badge variant="secondary">Connected via {account.provider}</Badge>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -164,7 +161,7 @@ const ConnectedAccounts = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-gray-500">Connected</p>
-                  <p className="text-sm font-medium">{account.connected_at}</p>
+                  <p className="text-sm font-medium">{new Date(account.connected_at).toLocaleDateString()}</p>
                 </div>
               </div>
             </CardContent>
@@ -205,8 +202,8 @@ const ConnectedAccounts = () => {
                     <p className="font-medium text-sm">{transaction.description}</p>
                     <p className="text-xs text-gray-500">
                       {transaction.merchant && `${transaction.merchant} • `}
-                      {transaction.category && (
-                        <Badge variant="outline" className="text-xs">{transaction.category}</Badge>
+                      {transaction.category_name && (
+                        <Badge variant="outline" className="text-xs">{transaction.category_name}</Badge>
                       )}
                     </p>
                   </div>

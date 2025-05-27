@@ -7,22 +7,16 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Search, Filter, Calendar, Edit, MoreHorizontal } from 'lucide-react';
-import { useFlinksData } from '@/hooks/useFlinksData';
-import { useToast } from '@/hooks/use-toast';
+import { Search, Filter, Edit, MoreHorizontal } from 'lucide-react';
+import { usePlaidData } from '@/hooks/usePlaidData';
+import { useDatabase } from '@/hooks/useDatabase';
 
 const TransactionManager = () => {
-  const { transactions, isLoading } = useFlinksData();
+  const { transactions, isLoading } = usePlaidData();
+  const { updateTransactionCategory } = useDatabase();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('date');
-  const [localTransactions, setLocalTransactions] = useState(transactions);
-  const { toast } = useToast();
-
-  // Update local transactions when data changes
-  useMemo(() => {
-    setLocalTransactions(transactions);
-  }, [transactions]);
 
   // Available categories for manual assignment
   const availableCategories = [
@@ -33,23 +27,23 @@ const TransactionManager = () => {
     'Bills & Utilities',
     'Healthcare',
     'Income',
-    'Uncategorized'
+    'Other'
   ];
 
   // Get unique categories from transactions
   const categories = useMemo(() => {
-    const uniqueCategories = [...new Set(localTransactions.map(t => t.category).filter(Boolean))];
+    const uniqueCategories = [...new Set(transactions.map(t => t.category_name).filter(Boolean))];
     return ['all', ...uniqueCategories];
-  }, [localTransactions]);
+  }, [transactions]);
 
   // Filter and sort transactions
   const filteredTransactions = useMemo(() => {
-    let filtered = localTransactions.filter(transaction => {
+    let filtered = transactions.filter(transaction => {
       const matchesSearch = 
         transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (transaction.merchant && transaction.merchant.toLowerCase().includes(searchTerm.toLowerCase()));
       
-      const matchesCategory = selectedCategory === 'all' || transaction.category === selectedCategory;
+      const matchesCategory = selectedCategory === 'all' || transaction.category_name === selectedCategory;
       
       return matchesSearch && matchesCategory;
     });
@@ -69,21 +63,14 @@ const TransactionManager = () => {
     });
 
     return filtered;
-  }, [localTransactions, searchTerm, selectedCategory, sortBy]);
+  }, [transactions, searchTerm, selectedCategory, sortBy]);
 
-  const handleCategoryChange = (transactionId: string, newCategory: string) => {
-    setLocalTransactions(prev => 
-      prev.map(transaction => 
-        transaction.id === transactionId 
-          ? { ...transaction, category: newCategory }
-          : transaction
-      )
-    );
-    
-    toast({
-      title: "Category Updated",
-      description: `Transaction categorized as ${newCategory}`,
-    });
+  const handleCategoryChange = async (transactionId: string, newCategory: string) => {
+    try {
+      await updateTransactionCategory(transactionId, newCategory);
+    } catch (error) {
+      console.error('Error updating category:', error);
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -165,7 +152,7 @@ const TransactionManager = () => {
 
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-gray-600">
-              Showing {filteredTransactions.length} of {localTransactions.length} transactions
+              Showing {filteredTransactions.length} of {transactions.length} transactions
             </p>
             {(searchTerm || selectedCategory !== 'all') && (
               <Button
@@ -214,7 +201,7 @@ const TransactionManager = () => {
                     </TableCell>
                     <TableCell>
                       <Select
-                        value={transaction.category || 'Uncategorized'}
+                        value={transaction.category_name || 'Other'}
                         onValueChange={(value) => handleCategoryChange(transaction.id, value)}
                       >
                         <SelectTrigger className="w-40 h-8">

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { plaidService } from '@/services/plaidService';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useDatabase } from '@/hooks/useDatabase';
 
 interface PlaidAccount {
   id: string;
@@ -24,11 +25,16 @@ interface PlaidTransaction {
 }
 
 export const usePlaidData = () => {
-  const [accounts, setAccounts] = useState<PlaidAccount[]>([]);
-  const [transactions, setTransactions] = useState<PlaidTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [plaidAccessToken, setPlaidAccessToken] = useState<string | null>(null);
   const { toast } = useToast();
+  const { 
+    accounts, 
+    transactions, 
+    saveAccount, 
+    saveTransactions, 
+    updateTransactionCategory 
+  } = useDatabase();
 
   // Load stored Plaid access token from localStorage
   useEffect(() => {
@@ -40,10 +46,10 @@ export const usePlaidData = () => {
 
   // Fetch data when access token is available
   useEffect(() => {
-    if (plaidAccessToken) {
+    if (plaidAccessToken && accounts.length === 0) {
       fetchPlaidData();
     }
-  }, [plaidAccessToken]);
+  }, [plaidAccessToken, accounts.length]);
 
   const fetchPlaidData = async () => {
     if (!plaidAccessToken) return;
@@ -52,33 +58,49 @@ export const usePlaidData = () => {
     try {
       const data = await plaidService.getAccountsAndTransactions(plaidAccessToken);
       
-      // Transform Plaid accounts to our format
-      const transformedAccounts: PlaidAccount[] = data.accounts.map(account => ({
-        id: account.account_id,
-        bank_name: 'Plaid Bank', // In real implementation, this would come from institution info
-        account_type: account.subtype || account.type,
-        account_number: `****${account.mask || '0000'}`,
-        balance: account.balances.current || 0,
-        currency: account.balances.iso_currency_code || 'CAD',
-        connected_at: new Date().toISOString().split('T')[0],
-      }));
+      // Save accounts to database
+      const accountPromises = data.accounts.map(async (account) => {
+        const dbAccount = {
+          external_account_id: account.account_id,
+          bank_name: 'Plaid Bank',
+          account_type: account.subtype || account.type,
+          account_number: `****${account.mask || '0000'}`,
+          balance: account.balances.current || 0,
+          currency: account.balances.iso_currency_code || 'CAD',
+          provider: 'plaid' as const,
+          connected_at: new Date().toISOString(),
+          last_synced_at: new Date().toISOString(),
+          is_active: true,
+        };
+        
+        return saveAccount(dbAccount);
+      });
 
-      // Transform Plaid transactions to our format
-      const transformedTransactions: PlaidTransaction[] = data.transactions.map(transaction => ({
-        id: transaction.transaction_id,
-        description: transaction.name,
-        amount: -transaction.amount, // Plaid uses positive for debits, we use negative
-        date: transaction.date,
-        merchant: transaction.merchant_name,
-        category: transaction.category ? transaction.category[0] : undefined,
-      }));
+      const savedAccounts = await Promise.all(accountPromises);
 
-      setAccounts(transformedAccounts);
-      setTransactions(transformedTransactions);
+      // Transform and save transactions
+      const transformedTransactions = data.transactions.map(transaction => {
+        const accountId = savedAccounts.find(
+          acc => acc.external_account_id === transaction.account_id
+        )?.id;
+
+        return {
+          account_id: accountId!,
+          external_transaction_id: transaction.transaction_id,
+          description: transaction.name,
+          amount: -transaction.amount, // Plaid uses positive for debits
+          date: transaction.date,
+          merchant: transaction.merchant_name,
+          category_name: transaction.category ? transaction.category[0] : undefined,
+          is_manual_category: false,
+        };
+      }).filter(t => t.account_id); // Filter out transactions without valid account_id
+
+      await saveTransactions(transformedTransactions);
 
       toast({
         title: "Accounts Updated",
-        description: `Successfully loaded ${transformedAccounts.length} accounts and ${transformedTransactions.length} transactions.`,
+        description: `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} transactions.`,
       });
     } catch (error) {
       console.error('Error fetching Plaid data:', error);
@@ -108,7 +130,20 @@ export const usePlaidData = () => {
 
       if (error) throw error;
 
-      setTransactions(data.categorizedTransactions);
+      // Update transactions with AI categories
+      const updatePromises = data.categorizedTransactions.map((catTrans: any) => {
+        const originalTrans = transactions.find(t => 
+          t.description === catTrans.description && 
+          Math.abs(t.amount - Math.abs(catTrans.amount)) < 0.01
+        );
+        
+        if (originalTrans && catTrans.category && !originalTrans.is_manual_category) {
+          return updateTransactionCategory(originalTrans.id, catTrans.category);
+        }
+      }).filter(Boolean);
+
+      await Promise.all(updatePromises);
+
       toast({
         title: "Transactions Categorized",
         description: "AI has successfully categorized your transactions.",
