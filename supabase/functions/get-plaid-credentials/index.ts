@@ -13,50 +13,68 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Getting Plaid credentials from environment...')
+    console.log('🔄 get-plaid-credentials function called')
+    console.log('📊 Request method:', req.method)
+    console.log('📊 Request headers:', Object.fromEntries(req.headers.entries()))
     
     // Get Plaid credentials from environment variables
     const clientId = Deno.env.get('PLAID_CLIENT_ID')
     const secret = Deno.env.get('PLAID_SECRET_KEY')
 
-    console.log('Plaid Client ID exists:', !!clientId)
-    console.log('Plaid Secret exists:', !!secret)
-    console.log('Client ID length:', clientId ? clientId.length : 0)
-    console.log('Secret length:', secret ? secret.length : 0)
+    console.log('🔍 Environment check:')
+    console.log('  - PLAID_CLIENT_ID exists:', !!clientId)
+    console.log('  - PLAID_SECRET_KEY exists:', !!secret)
+    
+    if (clientId) {
+      console.log('  - PLAID_CLIENT_ID length:', clientId.length)
+      console.log('  - PLAID_CLIENT_ID preview:', clientId.substring(0, 8) + '...')
+    }
+    
+    if (secret) {
+      console.log('  - PLAID_SECRET_KEY length:', secret.length)
+      console.log('  - PLAID_SECRET_KEY preview:', secret.substring(0, 8) + '...')
+    }
 
     if (!clientId || !secret) {
-      console.log('Missing Plaid credentials - returning null values')
+      console.error('❌ Missing Plaid credentials in environment')
+      console.error('Available env vars:', Object.keys(Deno.env.toObject()).filter(key => key.includes('PLAID')))
+      
       return new Response(
         JSON.stringify({ 
-          error: 'Plaid credentials not configured',
+          error: 'Plaid credentials not configured in environment',
           client_id: null,
           secret: null,
           debug: {
             hasClientId: !!clientId,
-            hasSecret: !!secret
+            hasSecret: !!secret,
+            availablePlaidVars: Object.keys(Deno.env.toObject()).filter(key => key.includes('PLAID'))
           }
         }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
+          status: 400,
         },
       )
     }
 
-    console.log('Returning Plaid credentials successfully')
+    console.log('✅ Returning Plaid credentials successfully')
+    const response = {
+      client_id: clientId,
+      secret: secret,
+      success: true
+    };
+    
+    console.log('📤 Response:', { ...response, secret: '[HIDDEN]' });
+    
     return new Response(
-      JSON.stringify({
-        client_id: clientId,
-        secret: secret,
-        success: true
-      }),
+      JSON.stringify(response),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       },
     )
   } catch (error) {
-    console.error('Error in get-plaid-credentials:', error)
+    console.error('💥 Error in get-plaid-credentials:', error)
     return new Response(
       JSON.stringify({ 
         error: error.message,

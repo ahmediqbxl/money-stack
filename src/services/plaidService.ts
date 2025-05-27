@@ -56,56 +56,85 @@ class PlaidService {
   private initialized: boolean = false;
   
   constructor() {
-    this.initialize();
+    console.log('🏗️ PlaidService constructor called');
   }
 
-  // Initialize with credentials from Supabase secrets
   private async initialize() {
-    if (this.initialized) return true;
+    if (this.initialized) {
+      console.log('✅ PlaidService already initialized');
+      return true;
+    }
     
     try {
-      console.log('🔄 Initializing Plaid service...');
+      console.log('🔄 Starting PlaidService initialization...');
+      console.log('📡 Calling get-plaid-credentials edge function...');
       
-      // Get credentials from Supabase Edge Function
       const { data, error } = await supabase.functions.invoke('get-plaid-credentials');
       
-      console.log('📡 Edge function response:', data);
-      console.log('❌ Edge function error:', error);
+      console.log('📊 Edge function invoke result:');
+      console.log('  - Data:', data);
+      console.log('  - Error:', error);
+      console.log('  - Data type:', typeof data);
+      console.log('  - Data keys:', data ? Object.keys(data) : 'N/A');
       
       if (error) {
-        console.error('❌ Error getting Plaid credentials from edge function:', error);
-        throw new Error(`Failed to get Plaid credentials: ${error.message}`);
+        console.error('❌ Supabase function invoke error:', error);
+        throw new Error(`Edge function error: ${JSON.stringify(error)}`);
       }
       
-      if (!data?.client_id || !data?.secret) {
-        console.error('❌ No Plaid credentials found in response:', data);
-        throw new Error('Plaid credentials not configured properly');
+      if (!data) {
+        console.error('❌ No data returned from edge function');
+        throw new Error('No data returned from get-plaid-credentials');
+      }
+
+      console.log('🔍 Checking credentials in response...');
+      console.log('  - client_id exists:', !!data.client_id);
+      console.log('  - secret exists:', !!data.secret);
+      console.log('  - client_id type:', typeof data.client_id);
+      console.log('  - secret type:', typeof data.secret);
+      
+      if (data.client_id) {
+        console.log('  - client_id length:', data.client_id.length);
+        console.log('  - client_id preview:', data.client_id.substring(0, 8) + '...');
+      }
+      
+      if (data.secret) {
+        console.log('  - secret length:', data.secret.length);
+        console.log('  - secret preview:', data.secret.substring(0, 8) + '...');
+      }
+      
+      if (!data.client_id || !data.secret) {
+        console.error('❌ Missing Plaid credentials in response');
+        console.error('Full response:', JSON.stringify(data, null, 2));
+        throw new Error('Plaid credentials not found in edge function response');
       }
       
       this.clientId = data.client_id;
       this.secret = data.secret;
       this.initialized = true;
       
-      console.log('✅ Plaid service initialized with real credentials');
-      console.log('🔑 Client ID starts with:', this.clientId.substring(0, 8) + '...');
-      console.log('🔐 Secret starts with:', this.secret.substring(0, 8) + '...');
+      console.log('✅ PlaidService initialized successfully');
+      console.log('🔑 Using client ID:', this.clientId.substring(0, 8) + '...');
+      console.log('🔐 Using secret:', this.secret.substring(0, 8) + '...');
       
       return true;
     } catch (error) {
-      console.error('💥 Error initializing Plaid service:', error);
+      console.error('💥 PlaidService initialization failed:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : 'No stack trace'
+      });
       throw error;
     }
   }
 
-  // Create a link token for Plaid Link
   async createLinkToken(userId: string): Promise<string> {
-    await this.initialize();
+    console.log('🚀 createLinkToken called for user:', userId);
     
-    if (!this.clientId || !this.secret || !this.initialized) {
-      throw new Error('Plaid service not properly initialized with credentials');
-    }
-
     try {
+      await this.initialize();
+      
+      console.log('🏗️ Building link token request...');
       const request: PlaidLinkTokenRequest = {
         client_id: this.clientId,
         secret: this.secret,
@@ -118,8 +147,9 @@ class PlaidService {
         products: ['transactions'],
       };
 
-      console.log('🚀 Creating Plaid link token with real API...');
-      console.log('📤 Request payload:', { ...request, secret: '[HIDDEN]' });
+      const requestForLogging = { ...request, secret: '[HIDDEN]' };
+      console.log('📤 Plaid API request:', requestForLogging);
+      console.log('🌐 Making request to:', `${this.baseUrl}/link/token/create`);
       
       const response = await fetch(`${this.baseUrl}/link/token/create`, {
         method: 'POST',
@@ -129,47 +159,50 @@ class PlaidService {
         body: JSON.stringify(request),
       });
 
+      console.log('📥 Plaid API response status:', response.status);
+      console.log('📥 Plaid API response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ Plaid API HTTP error:', response.status, errorText);
+        throw new Error(`Plaid API HTTP ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('📥 Plaid API response status:', response.status);
       console.log('📊 Plaid API response data:', data);
       
       if (data.error_code) {
-        console.error('❌ Plaid API Error:', data.error_code, '-', data.error_message);
+        console.error('❌ Plaid API error:', data.error_code, '-', data.error_message);
         throw new Error(`Plaid API Error: ${data.error_code} - ${data.error_message}`);
       }
 
       if (!data.link_token) {
+        console.error('❌ No link token in response:', data);
         throw new Error('No link token received from Plaid API');
       }
 
-      console.log('✅ Successfully created Plaid link token');
+      console.log('✅ Link token created successfully:', data.link_token.substring(0, 20) + '...');
       return data.link_token;
     } catch (error) {
-      console.error('💥 Error creating link token:', error);
+      console.error('💥 createLinkToken failed:', error);
       throw error;
     }
   }
 
-  // Exchange public token for access token
   async exchangePublicToken(publicToken: string): Promise<string> {
-    await this.initialize();
+    console.log('🔄 exchangePublicToken called with token:', publicToken.substring(0, 20) + '...');
     
-    if (!this.clientId || !this.secret || !this.initialized) {
-      throw new Error('Plaid service not properly initialized with credentials');
-    }
-
     try {
+      await this.initialize();
+      
       const request: PlaidExchangeTokenRequest = {
         client_id: this.clientId,
         secret: this.secret,
         public_token: publicToken,
       };
 
-      console.log('🔄 Exchanging public token for access token...');
+      console.log('📤 Token exchange request to:', `${this.baseUrl}/link/token/exchange`);
+      
       const response = await fetch(`${this.baseUrl}/link/token/exchange`, {
         method: 'POST',
         headers: {
@@ -178,43 +211,42 @@ class PlaidService {
         body: JSON.stringify(request),
       });
 
+      console.log('📥 Token exchange response status:', response.status);
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('❌ Token exchange HTTP error:', response.status, errorText);
+        throw new Error(`Token exchange HTTP ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('📥 Token exchange response:', { ...data, access_token: data.access_token ? '[RECEIVED]' : '[MISSING]' });
+      console.log('📊 Token exchange response:', { ...data, access_token: data.access_token ? '[RECEIVED]' : '[MISSING]' });
       
       if (data.error_code) {
-        console.error('❌ Plaid token exchange error:', data.error_code, '-', data.error_message);
+        console.error('❌ Token exchange API error:', data.error_code, '-', data.error_message);
         throw new Error(`Plaid API Error: ${data.error_code} - ${data.error_message}`);
       }
 
       if (!data.access_token) {
+        console.error('❌ No access token in response:', data);
         throw new Error('No access token received from Plaid API');
       }
 
-      console.log('✅ Successfully exchanged for access token');
+      console.log('✅ Access token received:', data.access_token.substring(0, 20) + '...');
       return data.access_token;
     } catch (error) {
-      console.error('💥 Error exchanging public token:', error);
+      console.error('💥 exchangePublicToken failed:', error);
       throw error;
     }
   }
 
   async getAccountsAndTransactions(accessToken: string): Promise<PlaidApiResponse> {
-    console.log('🔍 Fetching Plaid data for access token:', accessToken.substring(0, 15) + '...');
+    console.log('🔍 getAccountsAndTransactions called with token:', accessToken.substring(0, 20) + '...');
     
-    await this.initialize();
-    
-    if (!this.clientId || !this.secret || !this.initialized) {
-      throw new Error('Plaid service not properly initialized with credentials');
-    }
-
     try {
-      console.log('🚀 Fetching real data from Plaid sandbox...');
+      await this.initialize();
 
-      // Get accounts
+      console.log('📡 Fetching accounts from:', `${this.baseUrl}/accounts/get`);
       const accountsResponse = await fetch(`${this.baseUrl}/accounts/get`, {
         method: 'POST',
         headers: {
@@ -227,21 +259,27 @@ class PlaidService {
         }),
       });
 
+      console.log('📥 Accounts response status:', accountsResponse.status);
+
       if (!accountsResponse.ok) {
-        throw new Error(`Accounts API HTTP error! status: ${accountsResponse.status}`);
+        const errorText = await accountsResponse.text();
+        console.error('❌ Accounts API error:', accountsResponse.status, errorText);
+        throw new Error(`Accounts API HTTP ${accountsResponse.status}: ${errorText}`);
       }
 
       const accountsData = await accountsResponse.json();
-      console.log('📊 Accounts API response:', accountsData);
+      console.log('📊 Accounts data:', accountsData);
       
       if (accountsData.error_code) {
-        console.error('❌ Plaid accounts API error:', accountsData.error_code, '-', accountsData.error_message);
+        console.error('❌ Accounts API error:', accountsData.error_code, '-', accountsData.error_message);
         throw new Error(`Plaid API Error: ${accountsData.error_code} - ${accountsData.error_message}`);
       }
 
-      // Get transactions (last 30 days)
       const endDate = new Date().toISOString().split('T')[0];
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      console.log('📡 Fetching transactions from:', `${this.baseUrl}/transactions/get`);
+      console.log('📅 Date range:', startDate, 'to', endDate);
 
       const transactionsResponse = await fetch(`${this.baseUrl}/transactions/get`, {
         method: 'POST',
@@ -259,19 +297,23 @@ class PlaidService {
         }),
       });
 
+      console.log('📥 Transactions response status:', transactionsResponse.status);
+
       if (!transactionsResponse.ok) {
-        throw new Error(`Transactions API HTTP error! status: ${transactionsResponse.status}`);
+        const errorText = await transactionsResponse.text();
+        console.error('❌ Transactions API error:', transactionsResponse.status, errorText);
+        throw new Error(`Transactions API HTTP ${transactionsResponse.status}: ${errorText}`);
       }
 
       const transactionsData = await transactionsResponse.json();
-      console.log('📊 Transactions API response:', transactionsData);
+      console.log('📊 Transactions data:', transactionsData);
       
       if (transactionsData.error_code) {
-        console.error('❌ Plaid transactions API error:', transactionsData.error_code, '-', transactionsData.error_message);
+        console.error('❌ Transactions API error:', transactionsData.error_code, '-', transactionsData.error_message);
         throw new Error(`Plaid API Error: ${transactionsData.error_code} - ${transactionsData.error_message}`);
       }
 
-      console.log('✅ Successfully fetched real Plaid sandbox data:', {
+      console.log('✅ Real Plaid data fetched successfully:', {
         accounts: accountsData.accounts.length,
         transactions: transactionsData.transactions.length
       });
@@ -281,7 +323,7 @@ class PlaidService {
         transactions: transactionsData.transactions,
       };
     } catch (error) {
-      console.error('💥 Error fetching Plaid data:', error);
+      console.error('💥 getAccountsAndTransactions failed:', error);
       throw error;
     }
   }
