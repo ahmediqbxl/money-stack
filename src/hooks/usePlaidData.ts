@@ -211,6 +211,8 @@ export const usePlaidData = () => {
     if (transactions.length === 0) return;
 
     setIsLoading(true);
+    console.log('🧠 Starting AI categorization for', transactions.length, 'transactions');
+    
     try {
       const { data, error } = await supabase.functions.invoke('categorize-transactions', {
         body: { transactions: transactions }
@@ -218,23 +220,47 @@ export const usePlaidData = () => {
 
       if (error) throw error;
 
-      // Update transactions with AI categories
+      console.log('🧠 AI categorization response:', data);
+
+      // Improved matching logic with better logging
       const updatePromises = data.categorizedTransactions.map((catTrans: any) => {
-        const originalTrans = transactions.find(t => 
-          t.description === catTrans.description && 
-          Math.abs(t.amount - Math.abs(catTrans.amount)) < 0.01
-        );
+        // Try exact match on description first
+        let originalTrans = transactions.find(t => t.description === catTrans.description);
+        
+        // If no exact match, try fuzzy matching
+        if (!originalTrans) {
+          originalTrans = transactions.find(t => 
+            Math.abs(t.amount - Math.abs(catTrans.amount)) < 0.01 &&
+            t.description.toLowerCase().includes(catTrans.description.toLowerCase().split(' ')[0])
+          );
+        }
+        
+        console.log('🔍 Matching attempt:', {
+          aiDescription: catTrans.description,
+          aiCategory: catTrans.category,
+          found: !!originalTrans,
+          originalDescription: originalTrans?.description,
+          isManual: originalTrans?.is_manual_category
+        });
         
         if (originalTrans && catTrans.category && !originalTrans.is_manual_category) {
+          console.log('✅ Updating category for:', originalTrans.description, 'to', catTrans.category);
           return updateTransactionCategory(originalTrans.id, catTrans.category);
+        } else {
+          console.log('⚠️ Skipping update for:', catTrans.description, 'reasons:', {
+            noOriginal: !originalTrans,
+            noCategory: !catTrans.category,
+            isManual: originalTrans?.is_manual_category
+          });
         }
       }).filter(Boolean);
 
+      console.log('🔄 Executing', updatePromises.length, 'category updates');
       await Promise.all(updatePromises);
 
       toast({
         title: "Transactions Categorized",
-        description: "AI has successfully categorized your transactions.",
+        description: `AI successfully categorized ${updatePromises.length} transactions.`,
       });
     } catch (error) {
       console.error('Error categorizing transactions:', error);

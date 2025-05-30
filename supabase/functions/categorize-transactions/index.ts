@@ -14,7 +14,7 @@ serve(async (req) => {
 
   try {
     const { transactions } = await req.json();
-    const openAIApiKey = Deno.env.get('open_api_key');
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     
     if (!openAIApiKey) {
       throw new Error('OpenAI API key not configured');
@@ -22,26 +22,31 @@ serve(async (req) => {
 
     console.log('Processing', transactions.length, 'transactions');
     
-    // Batch all transactions into a single API call to avoid rate limits
-    const transactionDescriptions = transactions.map((t: any) => 
-      `- ${t.description} ($${Math.abs(t.amount)}) at ${t.merchant || 'Unknown'}`
-    ).join('\n');
+    // Create mapping between original and formatted descriptions
+    const transactionMapping = transactions.map((t: any, index: number) => ({
+      index,
+      originalDescription: t.description,
+      formattedDescription: `- ${t.description} ($${Math.abs(t.amount)}) at ${t.merchant || 'Unknown'}`,
+      originalTransaction: t
+    }));
+
+    const formattedDescriptions = transactionMapping.map(t => t.formattedDescription).join('\n');
 
     const prompt = `Categorize these financial transactions into one of these categories: 
     "Food & Dining", "Transportation", "Shopping", "Entertainment", "Bills & Utilities", "Healthcare", "Income", "Transfer", "Other".
     
     Transactions:
-    ${transactionDescriptions}
+    ${formattedDescriptions}
     
-    Respond with ONLY a JSON array where each object has "description" and "category" fields. Match the description exactly as provided. Do not include any markdown formatting or code blocks.
+    Respond with ONLY a JSON array where each object has "originalDescription" and "category" fields. Use the original description from the transaction (before the amount and merchant info). Do not include any markdown formatting or code blocks.
     
     Example format:
     [
-      {"description": "Metro Grocery Store", "category": "Food & Dining"},
-      {"description": "Uber Trip Downtown", "category": "Transportation"}
+      {"originalDescription": "Uber 063015 SF**POOL**", "category": "Transportation"},
+      {"originalDescription": "United Airlines", "category": "Transportation"}
     ]`;
 
-    console.log('Making single batch API call to OpenAI');
+    console.log('Making API call to OpenAI with improved matching');
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -52,7 +57,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are a financial transaction categorization expert. Always respond with valid JSON only, no markdown formatting.' },
+          { role: 'system', content: 'You are a financial transaction categorization expert. Always respond with valid JSON only, no markdown formatting. Use the original transaction description (the part before the amount and merchant).' },
           { role: 'user', content: prompt }
         ],
         temperature: 0.1,
@@ -64,7 +69,7 @@ serve(async (req) => {
       const errorText = await response.text();
       console.error('OpenAI API error:', response.status, response.statusText, errorText);
       
-      // Fallback to simple rule-based categorization if OpenAI fails
+      // Fallback to rule-based categorization if OpenAI fails
       console.log('Falling back to rule-based categorization');
       const categorizedTransactions = transactions.map((transaction: any) => {
         const description = transaction.description.toLowerCase();
@@ -72,11 +77,11 @@ serve(async (req) => {
         
         let category = 'Other';
         
-        if (description.includes('grocery') || description.includes('food') || merchant.includes('restaurant') || merchant.includes('tim hortons') || merchant.includes('mcdonald') || description.includes('metro')) {
+        if (description.includes('grocery') || description.includes('food') || merchant.includes('restaurant') || merchant.includes('tim hortons') || merchant.includes('mcdonald') || description.includes('metro') || description.includes('starbucks')) {
           category = 'Food & Dining';
         } else if (description.includes('uber') || description.includes('taxi') || description.includes('transit') || description.includes('gas') || merchant.includes('shell') || description.includes('ttc')) {
           category = 'Transportation';
-        } else if (description.includes('amazon') || description.includes('shop') || merchant.includes('canadian tire') || description.includes('target')) {
+        } else if (description.includes('amazon') || description.includes('shop') || merchant.includes('canadian tire') || description.includes('target') || description.includes('sparkfun')) {
           category = 'Shopping';
         } else if (description.includes('netflix') || description.includes('spotify') || description.includes('entertainment')) {
           category = 'Entertainment';
@@ -86,11 +91,14 @@ serve(async (req) => {
           category = 'Healthcare';
         } else if (description.includes('deposit') || description.includes('salary') || description.includes('payroll') || transaction.amount > 0) {
           category = 'Income';
+        } else if (description.includes('airline') || description.includes('united') || description.includes('air canada')) {
+          category = 'Transportation';
         }
         
         return {
           ...transaction,
-          category: category
+          category: category,
+          originalDescription: transaction.description
         };
       });
 
@@ -110,20 +118,19 @@ serve(async (req) => {
     let responseContent = data.choices[0].message.content.trim();
     console.log('OpenAI response content:', responseContent);
 
-    // More robust markdown cleanup that handles newlines and various formats
+    // Clean up markdown formatting
     responseContent = responseContent
-      .replace(/^```json\s*/g, '')  // Remove opening ```json with optional whitespace
-      .replace(/^```\s*/g, '')      // Remove opening ``` with optional whitespace
-      .replace(/\s*```$/g, '')      // Remove closing ``` with optional whitespace
-      .replace(/^\s*[\r\n]+/g, '')  // Remove leading newlines
-      .replace(/[\r\n]+\s*$/g, '')  // Remove trailing newlines
+      .replace(/^```json\s*/g, '')
+      .replace(/^```\s*/g, '')
+      .replace(/\s*```$/g, '')
+      .replace(/^\s*[\r\n]+/g, '')
+      .replace(/[\r\n]+\s*$/g, '')
       .trim();
 
     console.log('Cleaned response content:', responseContent);
 
     let categorizations;
     try {
-      // Try to parse the cleaned JSON response
       categorizations = JSON.parse(responseContent);
     } catch (parseError) {
       console.error('Failed to parse OpenAI response as JSON:', parseError);
@@ -137,11 +144,11 @@ serve(async (req) => {
         
         let category = 'Other';
         
-        if (description.includes('grocery') || description.includes('food') || merchant.includes('restaurant') || merchant.includes('tim hortons') || merchant.includes('mcdonald') || description.includes('metro')) {
+        if (description.includes('grocery') || description.includes('food') || merchant.includes('restaurant') || merchant.includes('tim hortons') || merchant.includes('mcdonald') || description.includes('metro') || description.includes('starbucks')) {
           category = 'Food & Dining';
         } else if (description.includes('uber') || description.includes('taxi') || description.includes('transit') || description.includes('gas') || merchant.includes('shell') || description.includes('ttc')) {
           category = 'Transportation';
-        } else if (description.includes('amazon') || description.includes('shop') || merchant.includes('canadian tire') || description.includes('target')) {
+        } else if (description.includes('amazon') || description.includes('shop') || merchant.includes('canadian tire') || description.includes('target') || description.includes('sparkfun')) {
           category = 'Shopping';
         } else if (description.includes('netflix') || description.includes('spotify') || description.includes('entertainment')) {
           category = 'Entertainment';
@@ -151,11 +158,14 @@ serve(async (req) => {
           category = 'Healthcare';
         } else if (description.includes('deposit') || description.includes('salary') || description.includes('payroll') || transaction.amount > 0) {
           category = 'Income';
+        } else if (description.includes('airline') || description.includes('united') || description.includes('air canada')) {
+          category = 'Transportation';
         }
         
         return {
           ...transaction,
-          category: category
+          category: category,
+          originalDescription: transaction.description
         };
       });
 
@@ -165,19 +175,37 @@ serve(async (req) => {
       );
     }
 
-    // Match categorizations with original transactions
+    // Improved matching logic - match using original descriptions
     const categorizedTransactions = transactions.map((transaction: any) => {
-      const match = categorizations.find((cat: any) => 
-        cat.description === transaction.description
+      // Try exact match first
+      let match = categorizations.find((cat: any) => 
+        cat.originalDescription === transaction.description
       );
+      
+      // If no exact match, try partial matching
+      if (!match) {
+        match = categorizations.find((cat: any) => 
+          transaction.description.includes(cat.originalDescription) ||
+          cat.originalDescription.includes(transaction.description)
+        );
+      }
+      
+      // Log matching process for debugging
+      if (match) {
+        console.log(`✅ Matched "${transaction.description}" with category "${match.category}"`);
+      } else {
+        console.log(`⚠️ No match found for "${transaction.description}"`);
+      }
       
       return {
         ...transaction,
-        category: match ? match.category : 'Other'
+        category: match ? match.category : 'Other',
+        originalDescription: transaction.description
       };
     });
 
-    console.log('Successfully categorized', categorizedTransactions.length, 'transactions');
+    console.log('Successfully categorized', categorizedTransactions.length, 'transactions with improved matching');
+    console.log('Categories assigned:', categorizedTransactions.map(t => ({ desc: t.description, cat: t.category })));
 
     return new Response(
       JSON.stringify({ categorizedTransactions }),
