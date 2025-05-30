@@ -2,11 +2,17 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Plus, Trash2, RefreshCw, Brain } from 'lucide-react';
+import { Building2, Plus, Trash2, RefreshCw, Brain, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import PlaidConnect from './PlaidConnect';
 import { usePlaidData } from '@/hooks/usePlaidData';
 import { useDatabase } from '@/hooks/useDatabase';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const ConnectedAccounts = () => {
   const [showConnectNew, setShowConnectNew] = useState(false);
@@ -26,8 +32,9 @@ const ConnectedAccounts = () => {
     await fetchPlaidData();
   };
 
-  const handleRefreshWithOptions = async (daysBack: number, maxTransactions: number) => {
-    await fetchPlaidData(undefined, { daysBack, maxTransactions });
+  const handleDateRangeSelect = async (daysBack: number, label: string) => {
+    console.log(`Fetching transactions for ${label} (${daysBack} days)`);
+    await fetchPlaidData(undefined, { daysBack, maxTransactions: 5000 });
   };
 
   const handleRemoveAccount = async (accountId: string) => {
@@ -115,15 +122,29 @@ const ConnectedAccounts = () => {
                 <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleRefreshWithOptions(180, 5000)}
-                disabled={isLoading}
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Get More (6mo)
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isLoading}
+                  >
+                    <Calendar className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    Date Range
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-white">
+                  {dateRangeOptions.map((option) => (
+                    <DropdownMenuItem
+                      key={option.days}
+                      onClick={() => handleDateRangeSelect(option.days, option.label)}
+                      className="cursor-pointer"
+                    >
+                      {option.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
           <Button
