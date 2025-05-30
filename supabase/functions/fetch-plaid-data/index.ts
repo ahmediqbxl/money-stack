@@ -15,8 +15,12 @@ serve(async (req) => {
   try {
     console.log('🔄 fetch-plaid-data function called')
     
-    const { accessToken } = await req.json()
-    console.log('📊 Access token received:', accessToken.substring(0, 20) + '...')
+    const { accessToken, daysBack = 90, maxTransactions = 2000 } = await req.json()
+    console.log('📊 Parameters received:', {
+      tokenPrefix: accessToken.substring(0, 20) + '...',
+      daysBack,
+      maxTransactions
+    })
     
     // Get Plaid credentials from environment
     const clientId = Deno.env.get('PLAID_CLIENT_ID')
@@ -64,52 +68,120 @@ serve(async (req) => {
       }))
     })
 
-    // Get transactions for the last 30 days
+    // Calculate date range for transactions
     const endDate = new Date().toISOString().split('T')[0]
-    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    console.log('📡 Fetching transactions from Plaid...', { startDate, endDate })
-    const transactionsResponse = await fetch('https://sandbox.plaid.com/transactions/get', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        client_id: clientId,
-        secret: secret,
-        access_token: accessToken,
-        start_date: startDate,
-        end_date: endDate,
-      }),
+    console.log('📡 Starting transaction fetch with pagination...', { 
+      startDate, 
+      endDate, 
+      daysBack,
+      maxTransactions
     })
 
-    if (!transactionsResponse.ok) {
-      const errorText = await transactionsResponse.text()
-      console.error('❌ Transactions API error:', transactionsResponse.status, errorText)
-      throw new Error(`Transactions API error: ${transactionsResponse.status}`)
+    // Fetch transactions with pagination
+    let allTransactions = []
+    let offset = 0
+    const batchSize = 500 // Maximum per request
+    let totalAvailable = 0
+    let requestCount = 0
+
+    while (allTransactions.length < maxTransactions) {
+      requestCount++
+      const remainingToFetch = Math.min(batchSize, maxTransactions - allTransactions.length)
+      
+      console.log(`📡 Fetching transaction batch ${requestCount}:`, {
+        offset,
+        count: remainingToFetch,
+        alreadyFetched: allTransactions.length,
+        maxTransactions
+      })
+
+      const transactionsResponse = await fetch('https://sandbox.plaid.com/transactions/get', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: clientId,
+          secret: secret,
+          access_token: accessToken,
+          start_date: startDate,
+          end_date: endDate,
+          count: remainingToFetch,
+          offset: offset,
+        }),
+      })
+
+      if (!transactionsResponse.ok) {
+        const errorText = await transactionsResponse.text()
+        console.error('❌ Transactions API error:', transactionsResponse.status, errorText)
+        throw new Error(`Transactions API error: ${transactionsResponse.status}`)
+      }
+
+      const transactionsData = await transactionsResponse.json()
+      totalAvailable = transactionsData.total_transactions || 0
+      
+      console.log(`✅ Transaction batch ${requestCount} received:`, {
+        batchSize: transactionsData.transactions?.length || 0,
+        totalFetched: allTransactions.length + (transactionsData.transactions?.length || 0),
+        totalAvailable,
+        hasMore: totalAvailable > allTransactions.length + (transactionsData.transactions?.length || 0)
+      })
+
+      // Add transactions to our collection
+      if (transactionsData.transactions && transactionsData.transactions.length > 0) {
+        allTransactions = allTransactions.concat(transactionsData.transactions)
+        offset += transactionsData.transactions.length
+      } else {
+        console.log('📋 No more transactions in this batch, stopping pagination')
+        break
+      }
+
+      // Check if we've fetched everything available
+      if (allTransactions.length >= totalAvailable) {
+        console.log('📋 Fetched all available transactions')
+        break
+      }
+
+      // Safety check to prevent infinite loops
+      if (requestCount >= 10) {
+        console.log('⚠️ Maximum request count reached, stopping pagination')
+        break
+      }
     }
 
-    const transactionsData = await transactionsResponse.json()
-    console.log('✅ Transactions data received successfully:', {
-      transactionsCount: transactionsData.transactions?.length || 0,
-      totalTransactions: transactionsData.total_transactions,
-      sampleTransaction: transactionsData.transactions?.[0] ? {
-        id: transactionsData.transactions[0].transaction_id,
-        name: transactionsData.transactions[0].name,
-        amount: transactionsData.transactions[0].amount,
-        date: transactionsData.transactions[0].date,
-        account_id: transactionsData.transactions[0].account_id
+    console.log('🎯 Transaction fetching completed:', {
+      totalRequests: requestCount,
+      finalCount: allTransactions.length,
+      totalAvailable,
+      dateRange: `${startDate} to ${endDate}`,
+      sampleTransaction: allTransactions[0] ? {
+        id: allTransactions[0].transaction_id,
+        name: allTransactions[0].name,
+        amount: allTransactions[0].amount,
+        date: allTransactions[0].date,
+        account_id: allTransactions[0].account_id
       } : null
     })
 
     const responseData = {
       accounts: accountsData.accounts || [],
-      transactions: transactionsData.transactions || [],
+      transactions: allTransactions,
+      metadata: {
+        totalTransactions: allTransactions.length,
+        totalAvailable,
+        dateRange: { startDate, endDate },
+        daysBack,
+        requestCount
+      }
     }
 
-    console.log('🎉 Successfully returning Plaid data:', {
+    console.log('🎉 Successfully returning enhanced Plaid data:', {
       accountsCount: responseData.accounts.length,
-      transactionsCount: responseData.transactions.length
+      transactionsCount: responseData.transactions.length,
+      totalAvailable,
+      dateRangeDays: daysBack
     })
 
     return new Response(

@@ -19,10 +19,15 @@ const ConnectedAccounts = () => {
     fetchPlaidData,
     handlePlaidSuccess,
     categorizeTransactions,
+    lastFetchMetadata,
   } = usePlaidData();
 
   const handleRefreshAccounts = async () => {
     await fetchPlaidData();
+  };
+
+  const handleRefreshWithOptions = async (daysBack: number, maxTransactions: number) => {
+    await fetchPlaidData(undefined, { daysBack, maxTransactions });
   };
 
   const handleRemoveAccount = async (accountId: string) => {
@@ -76,9 +81,17 @@ const ConnectedAccounts = () => {
         <div>
           <h3 className="text-lg font-semibold">Connected Accounts</h3>
           {accounts.length > 0 && (
-            <p className="text-sm text-gray-600">
-              Total Balance: <span className="font-semibold text-green-600">${totalBalance.toLocaleString()}</span>
-            </p>
+            <div className="space-y-1">
+              <p className="text-sm text-gray-600">
+                Total Balance: <span className="font-semibold text-green-600">${totalBalance.toLocaleString()}</span>
+              </p>
+              {lastFetchMetadata && (
+                <p className="text-xs text-gray-500">
+                  Last sync: {lastFetchMetadata.totalTransactions} transactions 
+                  ({lastFetchMetadata.daysBack} days, {lastFetchMetadata.requestCount} API calls)
+                </p>
+              )}
+            </div>
           )}
         </div>
         <div className="flex space-x-2">
@@ -101,6 +114,15 @@ const ConnectedAccounts = () => {
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleRefreshWithOptions(180, 5000)}
+                disabled={isLoading}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                Get More (6mo)
               </Button>
             </>
           )}
@@ -185,7 +207,14 @@ const ConnectedAccounts = () => {
         <Card className="border-0 shadow-md">
           <CardHeader>
             <CardTitle>Recent Transactions ({transactions.length})</CardTitle>
-            <CardDescription>Latest transactions from your connected accounts</CardDescription>
+            <CardDescription>
+              Latest transactions from your connected accounts
+              {lastFetchMetadata && lastFetchMetadata.totalAvailable > transactions.length && (
+                <span className="text-orange-600">
+                  {" "}• {lastFetchMetadata.totalAvailable - transactions.length} more available
+                </span>
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-y-auto">

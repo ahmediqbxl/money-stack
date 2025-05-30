@@ -29,6 +29,18 @@ interface PlaidTransaction {
 interface PlaidApiResponse {
   accounts: PlaidAccount[];
   transactions: PlaidTransaction[];
+  metadata?: {
+    totalTransactions: number;
+    totalAvailable: number;
+    dateRange: { startDate: string; endDate: string };
+    daysBack: number;
+    requestCount: number;
+  };
+}
+
+interface FetchOptions {
+  daysBack?: number;
+  maxTransactions?: number;
 }
 
 class PlaidService {
@@ -100,22 +112,37 @@ class PlaidService {
     }
   }
 
-  async getAccountsAndTransactions(accessToken: string): Promise<PlaidApiResponse> {
-    console.log('🔍 getAccountsAndTransactions called with token:', accessToken.substring(0, 20) + '...');
+  async getAccountsAndTransactions(
+    accessToken: string, 
+    options: FetchOptions = {}
+  ): Promise<PlaidApiResponse> {
+    const { daysBack = 90, maxTransactions = 2000 } = options;
+    
+    console.log('🔍 getAccountsAndTransactions called with:', {
+      tokenPrefix: accessToken.substring(0, 20) + '...',
+      daysBack,
+      maxTransactions
+    });
     
     try {
-      console.log('📡 Calling fetch-plaid-data edge function...');
+      console.log('📡 Calling fetch-plaid-data edge function with enhanced options...');
       
       const { data, error } = await supabase.functions.invoke('fetch-plaid-data', {
-        body: { accessToken }
+        body: { 
+          accessToken,
+          daysBack,
+          maxTransactions
+        }
       });
       
-      console.log('📊 Fetch data response:');
+      console.log('📊 Enhanced fetch data response:');
       console.log('  - Data structure:', {
         hasAccounts: !!data?.accounts,
         hasTransactions: !!data?.transactions,
+        hasMetadata: !!data?.metadata,
         accountsCount: data?.accounts?.length || 0,
-        transactionsCount: data?.transactions?.length || 0
+        transactionsCount: data?.transactions?.length || 0,
+        metadata: data?.metadata
       });
       console.log('  - Sample account:', data?.accounts?.[0]);
       console.log('  - Sample transaction:', data?.transactions?.[0]);
@@ -135,9 +162,10 @@ class PlaidService {
       const accounts = data.accounts || [];
       const transactions = data.transactions || [];
 
-      console.log('✅ Plaid data processed successfully:', {
+      console.log('✅ Enhanced Plaid data processed successfully:', {
         accounts: accounts.length,
         transactions: transactions.length,
+        metadata: data.metadata,
         accountsSample: accounts.slice(0, 2),
         transactionsSample: transactions.slice(0, 3)
       });
@@ -145,6 +173,7 @@ class PlaidService {
       return {
         accounts: accounts,
         transactions: transactions,
+        metadata: data.metadata,
       };
     } catch (error) {
       console.error('💥 getAccountsAndTransactions failed:', error);

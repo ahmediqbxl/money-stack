@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { plaidService } from '@/services/plaidService';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,6 +27,7 @@ export const usePlaidData = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [plaidAccessToken, setPlaidAccessToken] = useState<string | null>(null);
   const [hasFetched, setHasFetched] = useState(false);
+  const [lastFetchMetadata, setLastFetchMetadata] = useState<any>(null);
   const { toast } = useToast();
   const { 
     accounts, 
@@ -45,7 +45,10 @@ export const usePlaidData = () => {
     }
   }, []);
 
-  const fetchPlaidData = useCallback(async (accessToken?: string) => {
+  const fetchPlaidData = useCallback(async (
+    accessToken?: string, 
+    options: { daysBack?: number; maxTransactions?: number } = {}
+  ) => {
     // Use provided token or stored token
     const tokenToUse = accessToken || plaidAccessToken || localStorage.getItem('plaid_access_token');
     
@@ -54,17 +57,30 @@ export const usePlaidData = () => {
       return;
     }
     
-    console.log('🚀 Starting Plaid data fetch with token:', tokenToUse.substring(0, 20) + '...');
+    const { daysBack = 90, maxTransactions = 2000 } = options;
+    
+    console.log('🚀 Starting enhanced Plaid data fetch:', {
+      tokenPrefix: tokenToUse.substring(0, 20) + '...',
+      daysBack,
+      maxTransactions
+    });
     setIsLoading(true);
     
     try {
-      const data = await plaidService.getAccountsAndTransactions(tokenToUse);
-      console.log('📊 Raw Plaid data received:', {
+      const data = await plaidService.getAccountsAndTransactions(tokenToUse, {
+        daysBack,
+        maxTransactions
+      });
+      
+      console.log('📊 Enhanced raw Plaid data received:', {
         accountsCount: data.accounts.length,
         transactionsCount: data.transactions.length,
+        metadata: data.metadata,
         sampleAccount: data.accounts[0],
         sampleTransaction: data.transactions[0]
       });
+      
+      setLastFetchMetadata(data.metadata);
       
       // Save accounts to database with better duplicate checking
       console.log('💾 Starting to save accounts...');
@@ -101,19 +117,21 @@ export const usePlaidData = () => {
       });
 
       // Transform and save transactions with better duplicate handling
-      console.log('💾 Starting to transform and save transactions...');
+      console.log('💾 Starting to transform and save enhanced transaction set...');
       const transformedTransactions = data.transactions.map((transaction, index) => {
         const accountId = savedAccounts.find(
           acc => acc.external_account_id === transaction.account_id
         )?.id;
 
-        console.log(`💾 Processing transaction ${index + 1}:`, {
-          transaction_id: transaction.transaction_id,
-          name: transaction.name,
-          amount: transaction.amount,
-          account_id: transaction.account_id,
-          mapped_account_id: accountId
-        });
+        if (index < 5) { // Log first 5 for debugging
+          console.log(`💾 Processing transaction ${index + 1}:`, {
+            transaction_id: transaction.transaction_id,
+            name: transaction.name,
+            amount: transaction.amount,
+            account_id: transaction.account_id,
+            mapped_account_id: accountId
+          });
+        }
 
         return {
           account_id: accountId!,
@@ -132,16 +150,17 @@ export const usePlaidData = () => {
         return t.account_id;
       });
 
-      console.log('📊 Transformed transactions for database:', {
+      console.log('📊 Enhanced transactions transformed for database:', {
         originalCount: data.transactions.length,
         transformedCount: transformedTransactions.length,
+        metadata: data.metadata,
         sample: transformedTransactions.slice(0, 3)
       });
 
       if (transformedTransactions.length > 0) {
-        console.log('💾 Saving transactions to database...');
+        console.log('💾 Saving enhanced transaction set to database...');
         const savedTransactions = await saveTransactions(transformedTransactions);
-        console.log('✅ Transactions saved successfully:', {
+        console.log('✅ Enhanced transactions saved successfully:', {
           count: savedTransactions.length,
           sample: savedTransactions.slice(0, 3).map(t => ({ 
             id: t.id, 
@@ -155,14 +174,18 @@ export const usePlaidData = () => {
 
       setHasFetched(true);
       
+      const successMessage = data.metadata 
+        ? `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} of ${data.metadata.totalAvailable} available transactions (${data.metadata.daysBack} days)`
+        : `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} transactions.`;
+      
       toast({
         title: "Accounts Updated",
-        description: `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} transactions.`,
+        description: successMessage,
       });
 
-      console.log('🎉 Plaid data fetch and save completed successfully!');
+      console.log('🎉 Enhanced Plaid data fetch and save completed successfully!');
     } catch (error) {
-      console.error('💥 Error fetching Plaid data:', error);
+      console.error('💥 Error fetching enhanced Plaid data:', error);
       toast({
         title: "Error",
         description: "Failed to fetch account data from Plaid.",
@@ -174,14 +197,14 @@ export const usePlaidData = () => {
   }, [plaidAccessToken, isLoading, saveAccount, saveTransactions, toast]);
 
   const handlePlaidSuccess = async (accessToken: string) => {
-    console.log('🎯 Plaid success, storing token and immediately fetching data:', accessToken.substring(0, 20) + '...');
+    console.log('🎯 Plaid success, storing token and immediately fetching enhanced data:', accessToken.substring(0, 20) + '...');
     localStorage.setItem('plaid_access_token', accessToken);
     setPlaidAccessToken(accessToken);
     setHasFetched(false); // Reset to allow fetching with new token
     
-    // Immediately fetch data with the new token
-    console.log('🚀 Triggering immediate data fetch...');
-    await fetchPlaidData(accessToken);
+    // Immediately fetch data with the new token and enhanced options
+    console.log('🚀 Triggering immediate enhanced data fetch...');
+    await fetchPlaidData(accessToken, { daysBack: 90, maxTransactions: 2000 });
   };
 
   const categorizeTransactions = async () => {
@@ -232,5 +255,6 @@ export const usePlaidData = () => {
     fetchPlaidData,
     handlePlaidSuccess,
     categorizeTransactions,
+    lastFetchMetadata,
   };
 };
