@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+
+const dateRangeOptions = [
+  { days: 7, label: '1 Week' },
+  { days: 30, label: '1 Month' },
+  { days: 60, label: '2 Months' },
+  { days: 90, label: '3 Months' },
+  { days: 120, label: '4 Months' },
+  { days: 180, label: '6 Months' },
+  { days: 365, label: '12 Months' },
+];
 
 const ConnectedAccounts = () => {
   const [showConnectNew, setShowConnectNew] = useState(false);
