@@ -111,7 +111,14 @@ class PlaidService {
       });
       
       console.log('📊 Fetch data response:');
-      console.log('  - Data:', data);
+      console.log('  - Data structure:', {
+        hasAccounts: !!data?.accounts,
+        hasTransactions: !!data?.transactions,
+        accountsCount: data?.accounts?.length || 0,
+        transactionsCount: data?.transactions?.length || 0
+      });
+      console.log('  - Sample account:', data?.accounts?.[0]);
+      console.log('  - Sample transaction:', data?.transactions?.[0]);
       console.log('  - Error:', error);
       
       if (error) {
@@ -119,19 +126,25 @@ class PlaidService {
         throw new Error(`Fetch data error: ${JSON.stringify(error)}`);
       }
       
-      if (!data || !data.accounts || !data.transactions) {
-        console.error('❌ Invalid data structure in response:', data);
-        throw new Error('Invalid data structure received from edge function');
+      if (!data) {
+        console.error('❌ No data returned from edge function');
+        throw new Error('No data received from edge function');
       }
 
-      console.log('✅ Real Plaid data fetched successfully via edge function:', {
-        accounts: data.accounts.length,
-        transactions: data.transactions.length
+      // Ensure we have arrays even if empty
+      const accounts = data.accounts || [];
+      const transactions = data.transactions || [];
+
+      console.log('✅ Plaid data processed successfully:', {
+        accounts: accounts.length,
+        transactions: transactions.length,
+        accountsSample: accounts.slice(0, 2),
+        transactionsSample: transactions.slice(0, 3)
       });
 
       return {
-        accounts: data.accounts,
-        transactions: data.transactions,
+        accounts: accounts,
+        transactions: transactions,
       };
     } catch (error) {
       console.error('💥 getAccountsAndTransactions failed:', error);

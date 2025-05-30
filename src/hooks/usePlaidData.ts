@@ -54,18 +54,32 @@ export const usePlaidData = () => {
       return;
     }
     
-    console.log('Starting Plaid data fetch with token:', tokenToUse.substring(0, 20) + '...');
+    console.log('🚀 Starting Plaid data fetch with token:', tokenToUse.substring(0, 20) + '...');
     setIsLoading(true);
     
     try {
       const data = await plaidService.getAccountsAndTransactions(tokenToUse);
-      console.log('Plaid data received:', data);
+      console.log('📊 Raw Plaid data received:', {
+        accountsCount: data.accounts.length,
+        transactionsCount: data.transactions.length,
+        sampleAccount: data.accounts[0],
+        sampleTransaction: data.transactions[0]
+      });
       
       // Save accounts to database with better duplicate checking
-      const accountPromises = data.accounts.map(async (account) => {
+      console.log('💾 Starting to save accounts...');
+      const accountPromises = data.accounts.map(async (account, index) => {
+        console.log(`💾 Processing account ${index + 1}:`, {
+          account_id: account.account_id,
+          name: account.name,
+          type: account.type,
+          subtype: account.subtype,
+          balance: account.balances.current
+        });
+
         const dbAccount = {
           external_account_id: account.account_id,
-          bank_name: 'Plaid Bank',
+          bank_name: account.name || 'Plaid Bank',
           account_type: account.subtype || account.type,
           account_number: `****${account.mask || '0000'}`,
           balance: account.balances.current || 0,
@@ -76,17 +90,30 @@ export const usePlaidData = () => {
           is_active: true,
         };
         
+        console.log(`💾 Saving account ${index + 1} to database:`, dbAccount);
         return saveAccount(dbAccount);
       });
 
       const savedAccounts = await Promise.all(accountPromises);
-      console.log('Saved accounts:', savedAccounts);
+      console.log('✅ Accounts saved successfully:', {
+        count: savedAccounts.length,
+        accounts: savedAccounts.map(acc => ({ id: acc.id, external_id: acc.external_account_id }))
+      });
 
       // Transform and save transactions with better duplicate handling
-      const transformedTransactions = data.transactions.map(transaction => {
+      console.log('💾 Starting to transform and save transactions...');
+      const transformedTransactions = data.transactions.map((transaction, index) => {
         const accountId = savedAccounts.find(
           acc => acc.external_account_id === transaction.account_id
         )?.id;
+
+        console.log(`💾 Processing transaction ${index + 1}:`, {
+          transaction_id: transaction.transaction_id,
+          name: transaction.name,
+          amount: transaction.amount,
+          account_id: transaction.account_id,
+          mapped_account_id: accountId
+        });
 
         return {
           account_id: accountId!,
@@ -98,11 +125,32 @@ export const usePlaidData = () => {
           category_name: transaction.category ? transaction.category[0] : undefined,
           is_manual_category: false,
         };
-      }).filter(t => t.account_id); // Filter out transactions without valid account_id
+      }).filter(t => {
+        if (!t.account_id) {
+          console.warn('⚠️ Filtered out transaction without valid account_id:', t);
+        }
+        return t.account_id;
+      });
+
+      console.log('📊 Transformed transactions for database:', {
+        originalCount: data.transactions.length,
+        transformedCount: transformedTransactions.length,
+        sample: transformedTransactions.slice(0, 3)
+      });
 
       if (transformedTransactions.length > 0) {
+        console.log('💾 Saving transactions to database...');
         const savedTransactions = await saveTransactions(transformedTransactions);
-        console.log('Saved transactions:', savedTransactions);
+        console.log('✅ Transactions saved successfully:', {
+          count: savedTransactions.length,
+          sample: savedTransactions.slice(0, 3).map(t => ({ 
+            id: t.id, 
+            description: t.description, 
+            amount: t.amount 
+          }))
+        });
+      } else {
+        console.log('⚠️ No transactions to save after transformation');
       }
 
       setHasFetched(true);
@@ -111,8 +159,10 @@ export const usePlaidData = () => {
         title: "Accounts Updated",
         description: `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} transactions.`,
       });
+
+      console.log('🎉 Plaid data fetch and save completed successfully!');
     } catch (error) {
-      console.error('Error fetching Plaid data:', error);
+      console.error('💥 Error fetching Plaid data:', error);
       toast({
         title: "Error",
         description: "Failed to fetch account data from Plaid.",
@@ -124,12 +174,13 @@ export const usePlaidData = () => {
   }, [plaidAccessToken, isLoading, saveAccount, saveTransactions, toast]);
 
   const handlePlaidSuccess = async (accessToken: string) => {
-    console.log('Plaid success, storing token and immediately fetching data:', accessToken.substring(0, 20) + '...');
+    console.log('🎯 Plaid success, storing token and immediately fetching data:', accessToken.substring(0, 20) + '...');
     localStorage.setItem('plaid_access_token', accessToken);
     setPlaidAccessToken(accessToken);
     setHasFetched(false); // Reset to allow fetching with new token
     
     // Immediately fetch data with the new token
+    console.log('🚀 Triggering immediate data fetch...');
     await fetchPlaidData(accessToken);
   };
 

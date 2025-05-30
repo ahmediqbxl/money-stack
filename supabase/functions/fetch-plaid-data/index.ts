@@ -33,7 +33,7 @@ serve(async (req) => {
       )
     }
 
-    console.log('📡 Fetching accounts...')
+    console.log('📡 Fetching accounts from Plaid...')
     const accountsResponse = await fetch('https://sandbox.plaid.com/accounts/get', {
       method: 'POST',
       headers: {
@@ -53,12 +53,22 @@ serve(async (req) => {
     }
 
     const accountsData = await accountsResponse.json()
-    console.log('📊 Accounts data received:', accountsData.accounts?.length || 0, 'accounts')
+    console.log('✅ Accounts data received successfully:', {
+      accountsCount: accountsData.accounts?.length || 0,
+      accounts: accountsData.accounts?.map(acc => ({
+        id: acc.account_id,
+        name: acc.name,
+        type: acc.type,
+        subtype: acc.subtype,
+        balance: acc.balances?.current
+      }))
+    })
 
+    // Get transactions for the last 30 days
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    console.log('📡 Fetching transactions...')
+    console.log('📡 Fetching transactions from Plaid...', { startDate, endDate })
     const transactionsResponse = await fetch('https://sandbox.plaid.com/transactions/get', {
       method: 'POST',
       headers: {
@@ -70,8 +80,6 @@ serve(async (req) => {
         access_token: accessToken,
         start_date: startDate,
         end_date: endDate,
-        count: 100,
-        offset: 0,
       }),
     })
 
@@ -82,14 +90,30 @@ serve(async (req) => {
     }
 
     const transactionsData = await transactionsResponse.json()
-    console.log('📊 Transactions data received:', transactionsData.transactions?.length || 0, 'transactions')
+    console.log('✅ Transactions data received successfully:', {
+      transactionsCount: transactionsData.transactions?.length || 0,
+      totalTransactions: transactionsData.total_transactions,
+      sampleTransaction: transactionsData.transactions?.[0] ? {
+        id: transactionsData.transactions[0].transaction_id,
+        name: transactionsData.transactions[0].name,
+        amount: transactionsData.transactions[0].amount,
+        date: transactionsData.transactions[0].date,
+        account_id: transactionsData.transactions[0].account_id
+      } : null
+    })
 
-    console.log('✅ Real Plaid data fetched successfully')
+    const responseData = {
+      accounts: accountsData.accounts || [],
+      transactions: transactionsData.transactions || [],
+    }
+
+    console.log('🎉 Successfully returning Plaid data:', {
+      accountsCount: responseData.accounts.length,
+      transactionsCount: responseData.transactions.length
+    })
+
     return new Response(
-      JSON.stringify({
-        accounts: accountsData.accounts,
-        transactions: transactionsData.transactions,
-      }),
+      JSON.stringify(responseData),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
