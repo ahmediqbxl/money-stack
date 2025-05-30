@@ -14,31 +14,29 @@ serve(async (req) => {
 
   try {
     const { transactions } = await req.json();
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+    const openAIApiKey = Deno.env.get('open_api_key');
     
     if (!openAIApiKey) {
+      console.error('OpenAI API key not found in environment variables');
+      console.error('Available env vars:', Object.keys(Deno.env.toObject()));
       throw new Error('OpenAI API key not configured');
     }
 
     console.log('Processing', transactions.length, 'transactions');
+    console.log('Using OpenAI API key:', openAIApiKey.substring(0, 10) + '...');
     
-    // Create mapping between original and formatted descriptions
-    const transactionMapping = transactions.map((t: any, index: number) => ({
-      index,
-      originalDescription: t.description,
-      formattedDescription: `- ${t.description} ($${Math.abs(t.amount)}) at ${t.merchant || 'Unknown'}`,
-      originalTransaction: t
-    }));
-
-    const formattedDescriptions = transactionMapping.map(t => t.formattedDescription).join('\n');
+    // Create prompt with original descriptions for AI categorization
+    const transactionDescriptions = transactions.map((t: any) => 
+      `- ${t.description} ($${Math.abs(t.amount)}) at ${t.merchant || 'Unknown'}`
+    ).join('\n');
 
     const prompt = `Categorize these financial transactions into one of these categories: 
     "Food & Dining", "Transportation", "Shopping", "Entertainment", "Bills & Utilities", "Healthcare", "Income", "Transfer", "Other".
     
     Transactions:
-    ${formattedDescriptions}
+    ${transactionDescriptions}
     
-    Respond with ONLY a JSON array where each object has "originalDescription" and "category" fields. Use the original description from the transaction (before the amount and merchant info). Do not include any markdown formatting or code blocks.
+    Respond with ONLY a JSON array where each object has "originalDescription" and "category" fields. Use the exact original description from each transaction (before the amount and merchant info).
     
     Example format:
     [
@@ -46,7 +44,7 @@ serve(async (req) => {
       {"originalDescription": "United Airlines", "category": "Transportation"}
     ]`;
 
-    console.log('Making API call to OpenAI with improved matching');
+    console.log('Making API call to OpenAI');
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -57,7 +55,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are a financial transaction categorization expert. Always respond with valid JSON only, no markdown formatting. Use the original transaction description (the part before the amount and merchant).' },
+          { role: 'system', content: 'You are a financial transaction categorization expert. Always respond with valid JSON only, no markdown formatting. Use the exact original transaction description (the part before the amount and merchant).' },
           { role: 'user', content: prompt }
         ],
         temperature: 0.1,
@@ -175,26 +173,19 @@ serve(async (req) => {
       );
     }
 
-    // Improved matching logic - match using original descriptions
+    // Enhanced matching logic - match using exact original descriptions
     const categorizedTransactions = transactions.map((transaction: any) => {
-      // Try exact match first
-      let match = categorizations.find((cat: any) => 
+      // Find exact match using original description
+      const match = categorizations.find((cat: any) => 
         cat.originalDescription === transaction.description
       );
-      
-      // If no exact match, try partial matching
-      if (!match) {
-        match = categorizations.find((cat: any) => 
-          transaction.description.includes(cat.originalDescription) ||
-          cat.originalDescription.includes(transaction.description)
-        );
-      }
       
       // Log matching process for debugging
       if (match) {
         console.log(`✅ Matched "${transaction.description}" with category "${match.category}"`);
       } else {
         console.log(`⚠️ No match found for "${transaction.description}"`);
+        console.log('Available categorizations:', categorizations.map((c: any) => c.originalDescription));
       }
       
       return {
@@ -204,7 +195,7 @@ serve(async (req) => {
       };
     });
 
-    console.log('Successfully categorized', categorizedTransactions.length, 'transactions with improved matching');
+    console.log('Successfully categorized', categorizedTransactions.length, 'transactions');
     console.log('Categories assigned:', categorizedTransactions.map(t => ({ desc: t.description, cat: t.category })));
 
     return new Response(
