@@ -163,6 +163,10 @@ const Index = () => {
       .sort((a, b) => b.value - a.value); // Sort by spending amount
   }, [transactions]);
 
+  // Calculate spending totals first (needed for other calculations)
+  const totalSpent = categoryData.reduce((sum, cat) => sum + cat.value, 0);
+  const totalBudget = categoryData.reduce((sum, cat) => sum + cat.budget, 0);
+
   // Calculate potential savings from AI insights or provide fallback
   const potentialSavings = useMemo(() => {
     // Basic savings calculation based on over-budget categories
@@ -265,9 +269,6 @@ const Index = () => {
     
     return parts.join(", ") || "Connected accounts";
   };
-
-  const totalSpent = categoryData.reduce((sum, cat) => sum + cat.value, 0);
-  const totalBudget = categoryData.reduce((sum, cat) => sum + cat.budget, 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
