@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { DollarSign, Target, TrendingUp, AlertTriangle, Plus, RotateCcw } from 'lucide-react';
+import { DollarSign, Target, TrendingUp, AlertTriangle, Plus, Brain } from 'lucide-react';
+import { useDatabase } from '@/hooks/useDatabase';
+import { supabase } from '@/integrations/supabase/client';
 
 interface BudgetCategory {
   id: string;
@@ -20,6 +22,7 @@ interface BudgetCategory {
 
 const BudgetSettings = () => {
   const { toast } = useToast();
+  const { transactions } = useDatabase();
   
   // Initial budget data (this would eventually come from a backend)
   const [budgets, setBudgets] = useState<BudgetCategory[]>([
@@ -33,6 +36,7 @@ const BudgetSettings = () => {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const [isGeneratingBudgets, setIsGeneratingBudgets] = useState(false);
   
   // New category dialog state
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
@@ -126,13 +130,63 @@ const BudgetSettings = () => {
     });
   };
 
-  const handleResetBudgets = () => {
-    setBudgets(budgets.map(budget => ({ ...budget, spent: 0 })));
+  const handleGenerateBudgets = async () => {
+    setIsGeneratingBudgets(true);
     
-    toast({
-      title: "Budgets Reset",
-      description: "All spending amounts have been reset to $0.",
-    });
+    try {
+      // Calculate spending data from transactions
+      const categorySpending: { [key: string]: number } = {};
+      transactions.forEach(transaction => {
+        const category = transaction.category_name || 'Other';
+        const amount = Math.abs(transaction.amount);
+        categorySpending[category] = (categorySpending[category] || 0) + amount;
+      });
+
+      const totalSpent = Object.values(categorySpending).reduce((sum, amount) => sum + amount, 0);
+      
+      // Prepare data for GPT
+      const spendingData = Object.entries(categorySpending)
+        .map(([category, amount]) => `${category}: $${amount.toFixed(2)}`)
+        .join(', ');
+
+      const { data, error } = await supabase.functions.invoke('generate-budget-allocation', {
+        body: {
+          totalSpent,
+          categorySpending,
+          currentBudgets: budgets.map(b => ({ name: b.name, budget: b.budget, spent: b.spent })),
+          spendingData
+        }
+      });
+
+      if (error) throw error;
+
+      const allocatedBudgets = data.budgetAllocation;
+      
+      // Update budgets with GPT recommendations
+      const updatedBudgets = budgets.map(budget => {
+        const allocation = allocatedBudgets.find((a: any) => 
+          a.category.toLowerCase() === budget.name.toLowerCase()
+        );
+        return allocation ? { ...budget, budget: allocation.recommendedBudget } : budget;
+      });
+
+      setBudgets(updatedBudgets);
+      
+      toast({
+        title: "Budgets Allocated",
+        description: "GPT has analyzed your spending and allocated optimized budgets.",
+      });
+
+    } catch (error) {
+      console.error('Budget generation error:', error);
+      toast({
+        title: "Generation Failed",
+        description: "Unable to generate budget allocation. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingBudgets(false);
+    }
   };
 
   const totalBudget = budgets.reduce((sum, budget) => sum + budget.budget, 0);
@@ -334,13 +388,18 @@ const BudgetSettings = () => {
             <Button 
               variant="outline" 
               className="h-auto p-4 text-left"
-              onClick={handleResetBudgets}
+              onClick={handleGenerateBudgets}
+              disabled={isGeneratingBudgets}
             >
               <div className="flex items-center space-x-3">
-                <RotateCcw className="w-5 h-5 text-orange-500" />
+                <Brain className={`w-5 h-5 text-purple-500 ${isGeneratingBudgets ? 'animate-pulse' : ''}`} />
                 <div>
-                  <p className="font-medium">Reset All Budgets</p>
-                  <p className="text-sm text-gray-500">Start fresh with new monthly budgets</p>
+                  <p className="font-medium">
+                    {isGeneratingBudgets ? 'Generating...' : 'AI Budget Allocation'}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {isGeneratingBudgets ? 'Analyzing your spending patterns' : 'Let GPT optimize your budget based on spending patterns'}
+                  </p>
                 </div>
               </div>
             </Button>
