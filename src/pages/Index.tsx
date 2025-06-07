@@ -1,3 +1,4 @@
+
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,15 +23,96 @@ const Index = () => {
   const { user, signOut } = useAuth();
   const { transactions } = usePlaidData();
 
-  // Sample data for demo purposes
-  const monthlySpending = [
-    { month: 'Jan', amount: 3200, budget: 3000 },
-    { month: 'Feb', amount: 2800, budget: 3000 },
-    { month: 'Mar', amount: 3400, budget: 3000 },
-    { month: 'Apr', amount: 2900, budget: 3000 },
-    { month: 'May', amount: 3600, budget: 3000 },
-    { month: 'Jun', amount: 3100, budget: 3000 },
-  ];
+  // Dynamic monthly spending data from actual transactions
+  const monthlySpending = useMemo(() => {
+    if (transactions.length === 0) {
+      // Fallback sample data when no transactions
+      return [
+        { month: 'Jan', amount: 3200, budget: 3000 },
+        { month: 'Feb', amount: 2800, budget: 3000 },
+        { month: 'Mar', amount: 3400, budget: 3000 },
+        { month: 'Apr', amount: 2900, budget: 3000 },
+        { month: 'May', amount: 3600, budget: 3000 },
+        { month: 'Jun', amount: 3100, budget: 3000 },
+      ];
+    }
+
+    // Group transactions by month
+    const monthlyData: { [key: string]: number } = {};
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    transactions.forEach(transaction => {
+      if (transaction.amount < 0) { // Only expenses
+        const date = new Date(transaction.date);
+        const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+        const monthName = monthNames[date.getMonth()];
+        
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = 0;
+        }
+        monthlyData[monthKey] += Math.abs(transaction.amount);
+      }
+    });
+
+    // Convert to chart format and get last 6 months
+    const sortedMonths = Object.entries(monthlyData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([key, amount]) => {
+        const [year, monthIndex] = key.split('-');
+        return {
+          month: monthNames[parseInt(monthIndex)],
+          amount: Math.round(amount),
+          budget: 3000 // Default budget for now
+        };
+      });
+
+    return sortedMonths.length > 0 ? sortedMonths : [
+      { month: 'No Data', amount: 0, budget: 0 }
+    ];
+  }, [transactions]);
+
+  // Daily spending pattern for the last 30 days
+  const dailySpending = useMemo(() => {
+    if (transactions.length === 0) {
+      // Fallback sample data
+      return Array.from({ length: 30 }, (_, i) => ({
+        day: `Day ${i + 1}`,
+        amount: Math.floor(Math.random() * 200) + 50
+      }));
+    }
+
+    // Get last 30 days of spending
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const dailyData: { [key: string]: number } = {};
+
+    transactions.forEach(transaction => {
+      if (transaction.amount < 0) { // Only expenses
+        const transactionDate = new Date(transaction.date);
+        if (transactionDate >= thirtyDaysAgo) {
+          const dayKey = transactionDate.toISOString().split('T')[0];
+          if (!dailyData[dayKey]) {
+            dailyData[dayKey] = 0;
+          }
+          dailyData[dayKey] += Math.abs(transaction.amount);
+        }
+      }
+    });
+
+    // Convert to chart format
+    const sortedDays = Object.entries(dailyData)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, amount]) => ({
+        day: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        amount: Math.round(amount)
+      }));
+
+    return sortedDays.length > 0 ? sortedDays : [
+      { day: 'No Data', amount: 0 }
+    ];
+  }, [transactions]);
 
   // Dynamic category data from actual transactions
   const categoryData = useMemo(() => {
@@ -398,47 +480,77 @@ const Index = () => {
               <Card className="border-0 shadow-lg">
                 <CardHeader>
                   <CardTitle>Monthly Spending Trends</CardTitle>
-                  <CardDescription>6-month spending vs budget overview</CardDescription>
+                  <CardDescription>
+                    {transactions.length > 0 
+                      ? `Spending trends from your ${transactions.length} transactions`
+                      : "Sample data - connect your accounts to see real trends"
+                    }
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={monthlySpending}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <Tooltip formatter={(value) => [`$${value}`, '']} />
-                        <Bar dataKey="amount" fill="#3B82F6" name="Actual" />
-                        <Bar dataKey="budget" fill="#E5E7EB" name="Budget" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {monthlySpending.some(m => m.amount > 0) ? (
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={monthlySpending}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" />
+                          <YAxis />
+                          <Tooltip formatter={(value) => [`$${value}`, '']} />
+                          <Bar dataKey="amount" fill="#3B82F6" name="Actual" />
+                          <Bar dataKey="budget" fill="#E5E7EB" name="Budget" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-80 flex items-center justify-center text-gray-500">
+                      <div className="text-center">
+                        <TrendingUp className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                        <p>No spending data available</p>
+                        <p className="text-sm">Connect your accounts to see spending trends</p>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
               <Card className="border-0 shadow-lg">
                 <CardHeader>
-                  <CardTitle>Spending Pattern</CardTitle>
-                  <CardDescription>Daily spending over the last 30 days</CardDescription>
+                  <CardTitle>Daily Spending Pattern</CardTitle>
+                  <CardDescription>
+                    {transactions.length > 0 
+                      ? "Daily spending over the last 30 days from your transactions"
+                      : "Sample data - connect your accounts to see real daily patterns"
+                    }
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={monthlySpending}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <Tooltip formatter={(value) => [`$${value}`, 'Amount']} />
-                        <Line 
-                          type="monotone" 
-                          dataKey="amount" 
-                          stroke="#10B981" 
-                          strokeWidth={3}
-                          dot={{ fill: '#10B981', strokeWidth: 2, r: 6 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {dailySpending.some(d => d.amount > 0) ? (
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={dailySpending}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="day" />
+                          <YAxis />
+                          <Tooltip formatter={(value) => [`$${value}`, 'Amount']} />
+                          <Line 
+                            type="monotone" 
+                            dataKey="amount" 
+                            stroke="#10B981" 
+                            strokeWidth={3}
+                            dot={{ fill: '#10B981', strokeWidth: 2, r: 4 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-64 flex items-center justify-center text-gray-500">
+                      <div className="text-center">
+                        <TrendingDown className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                        <p>No daily spending data available</p>
+                        <p className="text-sm">Connect your accounts to see daily patterns</p>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
