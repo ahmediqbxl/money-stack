@@ -14,6 +14,7 @@ import AITransactionAnalysis from "@/components/AITransactionAnalysis";
 import TransactionManager from "@/components/TransactionManager";
 import BudgetSettings from "@/components/BudgetSettings";
 import { usePlaidData } from "@/hooks/usePlaidData";
+import AIInsights from "@/components/AIInsights";
 
 const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -135,7 +136,6 @@ const Index = () => {
 
   const totalSpent = categoryData.reduce((sum, cat) => sum + cat.value, 0);
   const totalBudget = categoryData.reduce((sum, cat) => sum + cat.budget, 0);
-  const potentialSavings = aiInsights.reduce((sum, insight) => sum + insight.potential, 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
@@ -368,45 +368,11 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="insights" className="space-y-6">
-            <div className="grid gap-6">
-              <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-green-50">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Lightbulb className="w-5 h-5 mr-2 text-yellow-500" />
-                    AI-Powered Savings Insights
-                  </CardTitle>
-                  <CardDescription>
-                    Personalized recommendations based on your spending patterns
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-
-              {aiInsights.map((insight, index) => (
-                <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-shadow">
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-1">
-                        <CardTitle className="text-lg">{insight.title}</CardTitle>
-                        <CardDescription>{insight.description}</CardDescription>
-                      </div>
-                      <Badge variant={insight.difficulty === 'Easy' ? 'default' : 'secondary'}>
-                        {insight.difficulty}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex justify-between items-center">
-                      <div className="text-2xl font-bold text-green-600">
-                        +${insight.potential}/year
-                      </div>
-                      <Button variant="outline" size="sm">
-                        Apply Suggestion
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <AIInsights 
+              transactions={transactions}
+              categoryData={categoryData}
+              totalSpent={totalSpent}
+            />
           </TabsContent>
 
           <TabsContent value="trends" className="space-y-6">

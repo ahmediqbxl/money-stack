@@ -1,0 +1,223 @@
+
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Lightbulb, Brain, TrendingDown, TrendingUp, PiggyBank, AlertTriangle, Target } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+
+interface AIInsight {
+  type: 'savings' | 'budget' | 'investment' | 'warning';
+  title: string;
+  description: string;
+  potential: number;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  category?: string;
+}
+
+interface AIInsightsProps {
+  transactions: any[];
+  categoryData: any[];
+  totalSpent: number;
+}
+
+const AIInsights = ({ transactions, categoryData, totalSpent }: AIInsightsProps) => {
+  const [insights, setInsights] = useState<AIInsight[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const { toast } = useToast();
+
+  // Generate basic insights from spending data
+  const generateBasicInsights = (): AIInsight[] => {
+    const basicInsights: AIInsight[] = [];
+
+    // Check for over-budget categories
+    categoryData.forEach(category => {
+      if (category.budget > 0 && category.value > category.budget) {
+        const overAmount = category.value - category.budget;
+        basicInsights.push({
+          type: 'warning',
+          title: `${category.name} Over Budget`,
+          description: `You've spent $${category.value.toFixed(2)} but budgeted $${category.budget}. Consider reducing spending in this category.`,
+          potential: overAmount * 12, // Annual savings if brought to budget
+          difficulty: 'Medium',
+          category: category.name
+        });
+      }
+    });
+
+    // Identify high-spending categories for optimization
+    const sortedCategories = [...categoryData].sort((a, b) => b.value - a.value);
+    if (sortedCategories.length > 0) {
+      const topCategory = sortedCategories[0];
+      const potentialSavings = topCategory.value * 0.15; // 15% reduction potential
+      
+      basicInsights.push({
+        type: 'savings',
+        title: `Optimize ${topCategory.name} Spending`,
+        description: `${topCategory.name} is your highest expense at $${topCategory.value.toFixed(2)}/month. Reducing by 15% could save significant money.`,
+        potential: potentialSavings * 12,
+        difficulty: 'Easy'
+      });
+    }
+
+    // Emergency fund suggestion if spending is high
+    if (totalSpent > 2000) {
+      basicInsights.push({
+        type: 'investment',
+        title: 'Emergency Fund Goal',
+        description: `With monthly spending of $${totalSpent.toFixed(2)}, consider building an emergency fund of $${(totalSpent * 3).toFixed(2)} (3 months expenses).`,
+        potential: 60, // Estimated annual interest
+        difficulty: 'Medium'
+      });
+    }
+
+    return basicInsights;
+  };
+
+  const generateAIInsights = async () => {
+    setIsGenerating(true);
+    try {
+      // Prepare spending data for AI analysis
+      const spendingData = categoryData.map(cat => 
+        `${cat.name}: $${cat.value.toFixed(2)} (Budget: $${cat.budget || 'Not set'})`
+      ).join(', ');
+
+      const recentTransactions = transactions
+        .slice(0, 20)
+        .map(t => `${t.description}: $${Math.abs(t.amount).toFixed(2)}`)
+        .join(', ');
+
+      const { data, error } = await supabase.functions.invoke('generate-budget-allocation', {
+        body: {
+          totalSpent,
+          categorySpending: categoryData.reduce((acc, cat) => ({ ...acc, [cat.name]: cat.value }), {}),
+          currentBudgets: categoryData.map(cat => ({ name: cat.name, budget: cat.budget, spent: cat.value })),
+          spendingData: `Monthly spending: ${spendingData}. Recent transactions: ${recentTransactions}`,
+          requestType: 'insights' // Add flag to distinguish from budget allocation
+        }
+      });
+
+      if (error) throw error;
+
+      // Parse AI insights if available, otherwise fall back to basic insights
+      const aiInsights = data.insights || generateBasicInsights();
+      setInsights(aiInsights);
+
+      toast({
+        title: "Insights Generated",
+        description: "AI has analyzed your spending and generated personalized insights.",
+      });
+
+    } catch (error) {
+      console.error('Error generating AI insights:', error);
+      // Fall back to basic insights
+      const basicInsights = generateBasicInsights();
+      setInsights(basicInsights);
+      
+      toast({
+        title: "Insights Generated",
+        description: "Generated insights based on your spending patterns.",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const getInsightIcon = (type: string) => {
+    switch (type) {
+      case 'savings':
+        return <PiggyBank className="w-5 h-5 text-green-500" />;
+      case 'budget':
+        return <Target className="w-5 h-5 text-blue-500" />;
+      case 'investment':
+        return <TrendingUp className="w-5 h-5 text-purple-500" />;
+      case 'warning':
+        return <AlertTriangle className="w-5 h-5 text-red-500" />;
+      default:
+        return <Lightbulb className="w-5 h-5 text-yellow-500" />;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-green-50">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Lightbulb className="w-5 h-5 text-yellow-500" />
+              <div>
+                <CardTitle>AI-Powered Savings Insights</CardTitle>
+                <CardDescription>
+                  Personalized recommendations based on your spending patterns
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              onClick={generateAIInsights}
+              disabled={isGenerating}
+              className="bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
+            >
+              {isGenerating ? (
+                <>
+                  <Brain className="w-4 h-4 mr-2 animate-pulse" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Brain className="w-4 h-4 mr-2" />
+                  Generate Insights
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {insights.length > 0 ? (
+        <div className="grid gap-6">
+          {insights.map((insight, index) => (
+            <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-shadow">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div className="flex items-start space-x-3">
+                    {getInsightIcon(insight.type)}
+                    <div className="space-y-1">
+                      <CardTitle className="text-lg">{insight.title}</CardTitle>
+                      <CardDescription>{insight.description}</CardDescription>
+                    </div>
+                  </div>
+                  <Badge variant={insight.difficulty === 'Easy' ? 'default' : insight.difficulty === 'Medium' ? 'secondary' : 'destructive'}>
+                    {insight.difficulty}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-between items-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    +${insight.potential.toFixed(0)}/year
+                  </div>
+                  <Button variant="outline" size="sm">
+                    Apply Suggestion
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="border-dashed border-2 border-gray-300">
+          <CardContent className="py-8 text-center">
+            <Brain className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Insights Generated Yet</h3>
+            <p className="text-gray-500 mb-4">
+              Click "Generate Insights" to get AI-powered recommendations based on your spending
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+export default AIInsights;
