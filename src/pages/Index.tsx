@@ -82,6 +82,24 @@ const Index = () => {
       .sort((a, b) => b.value - a.value); // Sort by spending amount
   }, [transactions]);
 
+  // Calculate potential savings from AI insights or provide fallback
+  const potentialSavings = useMemo(() => {
+    // Basic savings calculation based on over-budget categories
+    let savings = 0;
+    categoryData.forEach(category => {
+      if (category.budget > 0 && category.value > category.budget) {
+        savings += (category.value - category.budget) * 0.5; // Assume 50% of overspending can be saved
+      }
+    });
+    
+    // Add some potential from optimization (15% of top spending category)
+    if (categoryData.length > 0) {
+      savings += categoryData[0].value * 0.15;
+    }
+    
+    return Math.round(savings);
+  }, [categoryData]);
+
   // Sample recent transactions (keeping this for fallback when no real data)
   const recentTransactions = [
     { id: 1, merchant: 'Whole Foods', amount: -67.43, category: 'Food & Dining', date: '2024-05-23', type: 'debit' },
