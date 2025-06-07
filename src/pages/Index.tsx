@@ -25,15 +25,7 @@ const Index = () => {
   // Dynamic monthly spending data from actual transactions
   const monthlySpending = useMemo(() => {
     if (transactions.length === 0) {
-      // Fallback sample data when no transactions
-      return [
-        { month: 'Jan', amount: 3200, budget: 3000 },
-        { month: 'Feb', amount: 2800, budget: 3000 },
-        { month: 'Mar', amount: 3400, budget: 3000 },
-        { month: 'Apr', amount: 2900, budget: 3000 },
-        { month: 'May', amount: 3600, budget: 3000 },
-        { month: 'Jun', amount: 3100, budget: 3000 },
-      ];
+      return [];
     }
 
     // Group transactions by month
@@ -44,7 +36,6 @@ const Index = () => {
       if (transaction.amount < 0) { // Only expenses
         const date = new Date(transaction.date);
         const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
-        const monthName = monthNames[date.getMonth()];
         
         if (!monthlyData[monthKey]) {
           monthlyData[monthKey] = 0;
@@ -62,23 +53,17 @@ const Index = () => {
         return {
           month: monthNames[parseInt(monthIndex)],
           amount: Math.round(amount),
-          budget: 3000 // Default budget for now
+          budget: 0 // Will be set when budgets are implemented
         };
       });
 
-    return sortedMonths.length > 0 ? sortedMonths : [
-      { month: 'No Data', amount: 0, budget: 0 }
-    ];
+    return sortedMonths;
   }, [transactions]);
 
   // Daily spending pattern for the last 30 days
   const dailySpending = useMemo(() => {
     if (transactions.length === 0) {
-      // Fallback sample data
-      return Array.from({ length: 30 }, (_, i) => ({
-        day: `Day ${i + 1}`,
-        amount: Math.floor(Math.random() * 200) + 50
-      }));
+      return [];
     }
 
     // Get last 30 days of spending
@@ -108,9 +93,7 @@ const Index = () => {
         amount: Math.round(amount)
       }));
 
-    return sortedDays.length > 0 ? sortedDays : [
-      { day: 'No Data', amount: 0 }
-    ];
+    return sortedDays;
   }, [transactions]);
 
   // Dynamic category data from actual transactions
@@ -125,18 +108,6 @@ const Index = () => {
       'Income': '#2ECC71',
       'Transfer': '#95A5A6',
       'Other': '#E74C3C'
-    };
-
-    const categoryBudgets = {
-      'Food & Dining': 800,
-      'Transportation': 400,
-      'Shopping': 500,
-      'Entertainment': 300,
-      'Bills & Utilities': 600,
-      'Healthcare': 200,
-      'Income': 0,
-      'Transfer': 0,
-      'Other': 200
     };
 
     // Calculate spending by category from actual transactions
@@ -158,7 +129,7 @@ const Index = () => {
         name,
         value: Math.round(value * 100) / 100, // Round to 2 decimal places
         color: categoryColors[name as keyof typeof categoryColors] || '#95A5A6',
-        budget: categoryBudgets[name as keyof typeof categoryBudgets] || 0
+        budget: 0 // Will be set when budgets are implemented
       }))
       .sort((a, b) => b.value - a.value); // Sort by spending amount
   }, [transactions]);
@@ -167,23 +138,46 @@ const Index = () => {
   const totalSpent = categoryData.reduce((sum, cat) => sum + cat.value, 0);
   const totalBudget = categoryData.reduce((sum, cat) => sum + cat.budget, 0);
 
-  // Calculate potential savings from AI insights or provide fallback
+  // Calculate potential savings dynamically from spending patterns
   const potentialSavings = useMemo(() => {
-    // Basic savings calculation based on over-budget categories
+    if (transactions.length === 0) return 0;
+
     let savings = 0;
-    categoryData.forEach(category => {
-      if (category.budget > 0 && category.value > category.budget) {
-        savings += (category.value - category.budget) * 0.5; // Assume 50% of overspending can be saved
-      }
-    });
     
-    // Add some potential from optimization (15% of top spending category)
+    // Calculate savings from high-frequency small transactions (like coffee, fast food)
+    const smallTransactions = transactions.filter(t => 
+      t.amount < 0 && Math.abs(t.amount) < 20 && 
+      (t.category_name?.toLowerCase().includes('food') || 
+       t.category_name?.toLowerCase().includes('coffee') ||
+       t.description?.toLowerCase().includes('coffee') ||
+       t.description?.toLowerCase().includes('fast food'))
+    );
+    
+    if (smallTransactions.length > 0) {
+      const dailySmallSpending = smallTransactions.reduce((sum, t) => sum + Math.abs(t.amount), 0) / 30;
+      savings += dailySmallSpending * 0.3 * 30; // 30% reduction potential
+    }
+
+    // Add potential from top spending category optimization
     if (categoryData.length > 0) {
-      savings += categoryData[0].value * 0.15;
+      savings += categoryData[0].value * 0.15; // 15% of top category
+    }
+
+    // Add savings from subscription optimization
+    const subscriptions = transactions.filter(t =>
+      t.amount < 0 && 
+      (t.description?.toLowerCase().includes('subscription') ||
+       t.description?.toLowerCase().includes('netflix') ||
+       t.description?.toLowerCase().includes('spotify') ||
+       t.description?.toLowerCase().includes('amazon'))
+    );
+    
+    if (subscriptions.length > 0) {
+      savings += subscriptions.reduce((sum, t) => sum + Math.abs(t.amount), 0) * 0.2; // 20% potential
     }
     
     return Math.round(savings);
-  }, [categoryData]);
+  }, [transactions, categoryData]);
 
   // Sample recent transactions (keeping this for fallback when no real data)
   const recentTransactions = [
@@ -340,7 +334,7 @@ const Index = () => {
             <CardContent>
               <div className="text-2xl font-bold">${potentialSavings}/month</div>
               <p className="text-xs text-green-100">
-                {transactions.length > 0 ? "AI identified opportunities" : "Connect accounts to analyze"}
+                {transactions.length > 0 ? "Based on spending patterns" : "Connect accounts to analyze"}
               </p>
             </CardContent>
           </Card>
@@ -515,12 +509,12 @@ const Index = () => {
                   <CardDescription>
                     {transactions.length > 0 
                       ? `Spending trends from your ${transactions.length} transactions`
-                      : "Sample data - connect your accounts to see real trends"
+                      : "Connect your accounts to see real trends"
                     }
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {monthlySpending.some(m => m.amount > 0) ? (
+                  {monthlySpending.length > 0 ? (
                     <div className="h-80">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={monthlySpending}>
@@ -529,7 +523,9 @@ const Index = () => {
                           <YAxis />
                           <Tooltip formatter={(value) => [`$${value}`, '']} />
                           <Bar dataKey="amount" fill="#3B82F6" name="Actual" />
-                          <Bar dataKey="budget" fill="#E5E7EB" name="Budget" />
+                          {monthlySpending.some(m => m.budget > 0) && (
+                            <Bar dataKey="budget" fill="#E5E7EB" name="Budget" />
+                          )}
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -551,12 +547,12 @@ const Index = () => {
                   <CardDescription>
                     {transactions.length > 0 
                       ? "Daily spending over the last 30 days from your transactions"
-                      : "Sample data - connect your accounts to see real daily patterns"
+                      : "Connect your accounts to see real daily patterns"
                     }
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {dailySpending.some(d => d.amount > 0) ? (
+                  {dailySpending.length > 0 ? (
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={dailySpending}>
