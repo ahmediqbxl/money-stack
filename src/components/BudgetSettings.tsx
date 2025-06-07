@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { DollarSign, Target, TrendingUp, AlertTriangle } from 'lucide-react';
+import { DollarSign, Target, TrendingUp, AlertTriangle, Plus, RotateCcw } from 'lucide-react';
 
 interface BudgetCategory {
   id: string;
@@ -32,6 +33,11 @@ const BudgetSettings = () => {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  
+  // New category dialog state
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryBudget, setNewCategoryBudget] = useState<string>('');
 
   const handleEditBudget = (id: string, currentBudget: number) => {
     setEditingId(id);
@@ -65,6 +71,68 @@ const BudgetSettings = () => {
   const handleCancelEdit = () => {
     setEditingId(null);
     setEditValue('');
+  };
+
+  const handleAddCategory = () => {
+    if (!newCategoryName.trim()) {
+      toast({
+        title: "Invalid Category",
+        description: "Please enter a category name.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const budget = parseFloat(newCategoryBudget);
+    if (isNaN(budget) || budget <= 0) {
+      toast({
+        title: "Invalid Budget",
+        description: "Please enter a valid budget amount.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if category already exists
+    if (budgets.some(b => b.name.toLowerCase() === newCategoryName.toLowerCase())) {
+      toast({
+        title: "Category Exists",
+        description: "A category with this name already exists.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Generate a random color for the new category
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#F39C12', '#E74C3C', '#9B59B6', '#1ABC9C'];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+    const newCategory: BudgetCategory = {
+      id: Date.now().toString(),
+      name: newCategoryName.trim(),
+      budget: budget,
+      spent: 0,
+      color: randomColor
+    };
+
+    setBudgets([...budgets, newCategory]);
+    setNewCategoryName('');
+    setNewCategoryBudget('');
+    setIsAddCategoryOpen(false);
+
+    toast({
+      title: "Category Added",
+      description: `${newCategory.name} category has been created with a budget of $${budget}.`,
+    });
+  };
+
+  const handleResetBudgets = () => {
+    setBudgets(budgets.map(budget => ({ ...budget, spent: 0 })));
+    
+    toast({
+      title: "Budgets Reset",
+      description: "All spending amounts have been reset to $0.",
+    });
   };
 
   const totalBudget = budgets.reduce((sum, budget) => sum + budget.budget, 0);
@@ -210,17 +278,70 @@ const BudgetSettings = () => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Button variant="outline" className="h-auto p-4 text-left">
-              <div>
-                <p className="font-medium">Add New Category</p>
-                <p className="text-sm text-gray-500">Create a budget for a new spending category</p>
-              </div>
-            </Button>
+            <Dialog open={isAddCategoryOpen} onOpenChange={setIsAddCategoryOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="h-auto p-4 text-left">
+                  <div className="flex items-center space-x-3">
+                    <Plus className="w-5 h-5 text-blue-500" />
+                    <div>
+                      <p className="font-medium">Add New Category</p>
+                      <p className="text-sm text-gray-500">Create a budget for a new spending category</p>
+                    </div>
+                  </div>
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Category</DialogTitle>
+                  <DialogDescription>
+                    Create a new spending category with a monthly budget.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="categoryName">Category Name</Label>
+                    <Input
+                      id="categoryName"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="e.g., Gym & Fitness"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="categoryBudget">Monthly Budget</Label>
+                    <Input
+                      id="categoryBudget"
+                      type="number"
+                      value={newCategoryBudget}
+                      onChange={(e) => setNewCategoryBudget(e.target.value)}
+                      placeholder="0"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="flex justify-end space-x-2">
+                    <Button variant="outline" onClick={() => setIsAddCategoryOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleAddCategory}>
+                      Add Category
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
             
-            <Button variant="outline" className="h-auto p-4 text-left">
-              <div>
-                <p className="font-medium">Reset All Budgets</p>
-                <p className="text-sm text-gray-500">Start fresh with new monthly budgets</p>
+            <Button 
+              variant="outline" 
+              className="h-auto p-4 text-left"
+              onClick={handleResetBudgets}
+            >
+              <div className="flex items-center space-x-3">
+                <RotateCcw className="w-5 h-5 text-orange-500" />
+                <div>
+                  <p className="font-medium">Reset All Budgets</p>
+                  <p className="text-sm text-gray-500">Start fresh with new monthly budgets</p>
+                </div>
               </div>
             </Button>
           </div>
