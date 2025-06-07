@@ -1,4 +1,3 @@
-
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +20,7 @@ const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
   const { user, signOut } = useAuth();
-  const { transactions } = usePlaidData();
+  const { transactions, accounts } = usePlaidData();
 
   // Dynamic monthly spending data from actual transactions
   const monthlySpending = useMemo(() => {
@@ -234,6 +233,39 @@ const Index = () => {
     });
   };
 
+  // Dynamic calculations for overview cards
+  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
+  const connectedAccountsCount = accounts.length;
+  const budgetHealthPercentage = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
+  
+  // Calculate account type breakdown
+  const accountTypes = accounts.reduce((acc, account) => {
+    const type = account.account_type.toLowerCase();
+    if (type.includes('checking') || type.includes('chequing')) {
+      acc.checking = (acc.checking || 0) + 1;
+    } else if (type.includes('credit')) {
+      acc.credit = (acc.credit || 0) + 1;
+    } else if (type.includes('saving')) {
+      acc.savings = (acc.savings || 0) + 1;
+    } else {
+      acc.other = (acc.other || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Generate account breakdown text
+  const getAccountBreakdown = () => {
+    if (connectedAccountsCount === 0) return "No accounts connected";
+    
+    const parts = [];
+    if (accountTypes.checking) parts.push(`${accountTypes.checking} checking`);
+    if (accountTypes.savings) parts.push(`${accountTypes.savings} savings`);
+    if (accountTypes.credit) parts.push(`${accountTypes.credit} credit`);
+    if (accountTypes.other) parts.push(`${accountTypes.other} other`);
+    
+    return parts.join(", ") || "Connected accounts";
+  };
+
   const totalSpent = categoryData.reduce((sum, cat) => sum + cat.value, 0);
   const totalBudget = categoryData.reduce((sum, cat) => sum + cat.budget, 0);
 
@@ -278,7 +310,7 @@ const Index = () => {
           <AITransactionAnalysis />
         </div>
 
-        {/* Overview Cards */}
+        {/* Overview Cards - Now Dynamic */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -293,7 +325,8 @@ const Index = () => {
                     ${totalBudget - totalSpent > 0 ? '+' : ''}${(totalBudget - totalSpent).toLocaleString()} vs budget
                   </>
                 )}
-                {totalBudget === 0 && "From connected accounts"}
+                {totalBudget === 0 && transactions.length > 0 && "From connected accounts"}
+                {totalBudget === 0 && transactions.length === 0 && "No spending data"}
               </p>
             </CardContent>
           </Card>
@@ -306,7 +339,7 @@ const Index = () => {
             <CardContent>
               <div className="text-2xl font-bold">${potentialSavings}/month</div>
               <p className="text-xs text-green-100">
-                AI identified opportunities
+                {transactions.length > 0 ? "AI identified opportunities" : "Connect accounts to analyze"}
               </p>
             </CardContent>
           </Card>
@@ -317,9 +350,7 @@ const Index = () => {
               <Target className="h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0}%
-              </div>
+              <div className="text-2xl font-bold">{budgetHealthPercentage}%</div>
               <p className="text-xs text-purple-100">
                 {totalBudget > 0 ? "of monthly budget used" : "No budget set"}
               </p>
@@ -332,9 +363,9 @@ const Index = () => {
               <CreditCard className="h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3</div>
+              <div className="text-2xl font-bold">{connectedAccountsCount}</div>
               <p className="text-xs text-orange-100">
-                2 checking, 1 credit card
+                {getAccountBreakdown()}
               </p>
             </CardContent>
           </Card>
