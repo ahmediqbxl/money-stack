@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,11 +13,13 @@ import ConnectedAccounts from "@/components/ConnectedAccounts";
 import AITransactionAnalysis from "@/components/AITransactionAnalysis";
 import TransactionManager from "@/components/TransactionManager";
 import BudgetSettings from "@/components/BudgetSettings";
+import { usePlaidData } from "@/hooks/usePlaidData";
 
 const Index = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
   const { user, signOut } = useAuth();
+  const { transactions } = usePlaidData();
 
   // Sample data for demo purposes
   const monthlySpending = [
@@ -29,15 +31,57 @@ const Index = () => {
     { month: 'Jun', amount: 3100, budget: 3000 },
   ];
 
-  const categoryData = [
-    { name: 'Food & Dining', value: 850, color: '#FF6B6B', budget: 800 },
-    { name: 'Transportation', value: 420, color: '#4ECDC4', budget: 400 },
-    { name: 'Shopping', value: 680, color: '#45B7D1', budget: 500 },
-    { name: 'Entertainment', value: 320, color: '#96CEB4', budget: 300 },
-    { name: 'Bills & Utilities', value: 580, color: '#FFEAA7', budget: 600 },
-    { name: 'Healthcare', value: 250, color: '#DDA0DD', budget: 200 },
-  ];
+  // Dynamic category data from actual transactions
+  const categoryData = useMemo(() => {
+    const categoryColors = {
+      'Food & Dining': '#FF6B6B',
+      'Transportation': '#4ECDC4',
+      'Shopping': '#45B7D1',
+      'Entertainment': '#96CEB4',
+      'Bills & Utilities': '#FFEAA7',
+      'Healthcare': '#DDA0DD',
+      'Income': '#2ECC71',
+      'Transfer': '#95A5A6',
+      'Other': '#E74C3C'
+    };
 
+    const categoryBudgets = {
+      'Food & Dining': 800,
+      'Transportation': 400,
+      'Shopping': 500,
+      'Entertainment': 300,
+      'Bills & Utilities': 600,
+      'Healthcare': 200,
+      'Income': 0,
+      'Transfer': 0,
+      'Other': 200
+    };
+
+    // Calculate spending by category from actual transactions
+    const categorySpending: { [key: string]: number } = {};
+    
+    transactions.forEach(transaction => {
+      // Only count expenses (negative amounts)
+      if (transaction.amount < 0) {
+        const category = transaction.category_name || 'Other';
+        const amount = Math.abs(transaction.amount);
+        categorySpending[category] = (categorySpending[category] || 0) + amount;
+      }
+    });
+
+    // Convert to array format for the chart, only include categories with spending
+    return Object.entries(categorySpending)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value]) => ({
+        name,
+        value: Math.round(value * 100) / 100, // Round to 2 decimal places
+        color: categoryColors[name as keyof typeof categoryColors] || '#95A5A6',
+        budget: categoryBudgets[name as keyof typeof categoryBudgets] || 0
+      }))
+      .sort((a, b) => b.value - a.value); // Sort by spending amount
+  }, [transactions]);
+
+  // Sample recent transactions (keeping this for fallback when no real data)
   const recentTransactions = [
     { id: 1, merchant: 'Whole Foods', amount: -67.43, category: 'Food & Dining', date: '2024-05-23', type: 'debit' },
     { id: 2, merchant: 'Uber', amount: -23.50, category: 'Transportation', date: '2024-05-22', type: 'credit' },
@@ -144,7 +188,12 @@ const Index = () => {
             <CardContent>
               <div className="text-2xl font-bold">${totalSpent.toLocaleString()}</div>
               <p className="text-xs text-blue-100">
-                ${totalBudget - totalSpent > 0 ? '+' : ''}${(totalBudget - totalSpent).toLocaleString()} vs budget
+                {totalBudget > 0 && (
+                  <>
+                    ${totalBudget - totalSpent > 0 ? '+' : ''}${(totalBudget - totalSpent).toLocaleString()} vs budget
+                  </>
+                )}
+                {totalBudget === 0 && "From connected accounts"}
               </p>
             </CardContent>
           </Card>
@@ -168,9 +217,11 @@ const Index = () => {
               <Target className="h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{Math.round((totalSpent / totalBudget) * 100)}%</div>
+              <div className="text-2xl font-bold">
+                {totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0}%
+              </div>
               <p className="text-xs text-purple-100">
-                of monthly budget used
+                {totalBudget > 0 ? "of monthly budget used" : "No budget set"}
               </p>
             </CardContent>
           </Card>
@@ -201,44 +252,63 @@ const Index = () => {
 
           <TabsContent value="overview" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Spending by Category */}
+              {/* Dynamic Spending by Category */}
               <Card className="border-0 shadow-lg">
                 <CardHeader>
                   <CardTitle>Spending by Category</CardTitle>
-                  <CardDescription>Current month breakdown</CardDescription>
+                  <CardDescription>
+                    {categoryData.length > 0 
+                      ? `Current month breakdown from ${transactions.length} transactions`
+                      : "Connect your accounts to see spending breakdown"
+                    }
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={categoryData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={120}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {categoryData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value) => [`$${value}`, 'Amount']} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    {categoryData.map((category, index) => (
-                      <div key={index} className="flex items-center space-x-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: category.color }}
-                        ></div>
-                        <span className="text-sm text-gray-600">{category.name}</span>
+                  {categoryData.length > 0 ? (
+                    <>
+                      <div className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={categoryData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={120}
+                              paddingAngle={5}
+                              dataKey="value"
+                            >
+                              {categoryData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value) => [`$${value}`, 'Amount']} />
+                          </PieChart>
+                        </ResponsiveContainer>
                       </div>
-                    ))}
-                  </div>
+                      <div className="grid grid-cols-2 gap-2 mt-4">
+                        {categoryData.map((category, index) => (
+                          <div key={index} className="flex items-center space-x-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: category.color }}
+                            ></div>
+                            <span className="text-sm text-gray-600 truncate">
+                              {category.name} (${category.value})
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-80 flex items-center justify-center text-gray-500">
+                      <div className="text-center">
+                        <PiggyBank className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                        <p>No spending data available</p>
+                        <p className="text-sm">Connect your accounts to see your spending breakdown</p>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -249,26 +319,41 @@ const Index = () => {
                   <CardDescription>How you're tracking this month</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {categoryData.map((category, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>{category.name}</span>
-                        <span className="text-gray-500">
-                          ${category.value} / ${category.budget}
-                        </span>
+                  {categoryData.length > 0 ? (
+                    categoryData.map((category, index) => (
+                      <div key={index} className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>{category.name}</span>
+                          <span className="text-gray-500">
+                            ${category.value} / ${category.budget || 'No budget'}
+                          </span>
+                        </div>
+                        {category.budget > 0 && (
+                          <>
+                            <Progress 
+                              value={(category.value / category.budget) * 100} 
+                              className="h-2"
+                            />
+                            {category.value > category.budget && (
+                              <p className="text-xs text-red-500 flex items-center">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                Over budget by ${(category.value - category.budget).toFixed(2)}
+                              </p>
+                            )}
+                          </>
+                        )}
+                        {category.budget === 0 && (
+                          <div className="text-xs text-gray-400">No budget set for this category</div>
+                        )}
                       </div>
-                      <Progress 
-                        value={(category.value / category.budget) * 100} 
-                        className="h-2"
-                      />
-                      {category.value > category.budget && (
-                        <p className="text-xs text-red-500 flex items-center">
-                          <AlertTriangle className="w-3 h-3 mr-1" />
-                          Over budget by ${category.value - category.budget}
-                        </p>
-                      )}
+                    ))
+                  ) : (
+                    <div className="text-center text-gray-500 py-8">
+                      <Target className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      <p>No spending data to track</p>
+                      <p className="text-sm">Connect accounts to see budget progress</p>
                     </div>
-                  ))}
+                  )}
                 </CardContent>
               </Card>
             </div>
