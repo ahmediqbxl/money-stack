@@ -129,15 +129,32 @@ export const useDatabase = () => {
 
   const deleteAccount = async (accountId: string) => {
     try {
+      console.log('🗑️ useDatabase: Starting account deletion for:', accountId);
+      
+      // Call the database service to delete the account and its transactions
       await databaseService.deleteAccount(accountId);
-      setAccounts(prev => prev.filter(a => a.id !== accountId));
-      setTransactions(prev => prev.filter(t => t.account_id !== accountId));
+      
+      // Immediately update local state to remove the account and its transactions
+      setAccounts(prev => {
+        const filtered = prev.filter(a => a.id !== accountId);
+        console.log('🔄 Updated accounts state:', filtered.length, 'accounts remaining');
+        return filtered;
+      });
+      
+      setTransactions(prev => {
+        const filtered = prev.filter(t => t.account_id !== accountId);
+        console.log('🔄 Updated transactions state:', filtered.length, 'transactions remaining');
+        return filtered;
+      });
+      
       toast({
         title: "Account Removed",
-        description: "Bank account has been disconnected.",
+        description: "Bank account has been disconnected and all related data removed.",
       });
+      
+      console.log('✅ Account deletion completed successfully');
     } catch (error) {
-      console.error('Error deleting account:', error);
+      console.error('❌ Error deleting account:', error);
       toast({
         title: "Error",
         description: "Failed to remove account.",

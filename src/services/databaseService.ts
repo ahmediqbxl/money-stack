@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 export interface DatabaseAccount {
@@ -98,15 +97,31 @@ class DatabaseService {
   }
 
   async deleteAccount(accountId: string): Promise<void> {
-    const { error } = await supabase
+    console.log('🗑️ Deleting account:', accountId);
+    
+    // First, delete all transactions for this account
+    const { error: transactionError } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('account_id', accountId);
+
+    if (transactionError) {
+      console.error('Error deleting account transactions:', transactionError);
+      throw transactionError;
+    }
+
+    // Then mark the account as inactive (soft delete)
+    const { error: accountError } = await supabase
       .from('accounts')
       .update({ is_active: false })
       .eq('id', accountId);
 
-    if (error) {
-      console.error('Error deleting account:', error);
-      throw error;
+    if (accountError) {
+      console.error('Error deleting account:', accountError);
+      throw accountError;
     }
+
+    console.log('✅ Account and transactions successfully deleted');
   }
 
   // Transaction operations
