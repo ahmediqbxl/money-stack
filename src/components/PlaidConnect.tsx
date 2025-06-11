@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,7 +52,7 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
       return;
     }
 
-    console.log('🚀 Starting Plaid Link with token:', linkToken.substring(0, 20) + '...');
+    console.log('🚀 Starting Plaid Link with production token:', linkToken.substring(0, 20) + '...');
     setIsConnecting(true);
     setError(null);
     
@@ -67,7 +66,7 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
           try {
             console.log('🔄 Exchanging public token for access token...');
             const accessToken = await plaidService.exchangePublicToken(public_token);
-            console.log('✅ Access token received:', accessToken.substring(0, 20) + '...');
+            console.log('✅ Production access token received:', accessToken.substring(0, 20) + '...');
             
             if (onSuccess) {
               onSuccess(accessToken);
@@ -75,7 +74,7 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
             
             toast({
               title: "Success!",
-              description: "Bank account connected successfully via Plaid.",
+              description: "Bank account connected successfully via Plaid Production.",
             });
           } catch (error) {
             console.error('💥 Error exchanging token:', error);
@@ -123,11 +122,11 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
       if (user && !linkToken && !isCreatingToken) {
         setIsCreatingToken(true);
         try {
-          console.log('🔄 Creating link token for user:', user.id);
+          console.log('🔄 Creating production link token for user:', user.id);
           setError(null);
           const token = await plaidService.createLinkToken(user.id);
           setLinkToken(token);
-          console.log('✅ Link token created successfully:', token.substring(0, 20) + '...');
+          console.log('✅ Production link token created successfully:', token.substring(0, 20) + '...');
         } catch (error) {
           console.error('💥 Error creating link token:', error);
           setError(`Failed to initialize Plaid: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -181,16 +180,10 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
                 : error
                   ? 'Please check configuration and try again'
                   : isConnecting 
-                    ? 'Connecting via Plaid...' 
-                    : 'Powered by Plaid - Real API calls via edge functions'
+                    ? 'Connecting via Plaid Production...' 
+                    : 'Powered by Plaid - Production API via edge functions'
             }
           </p>
-          
-          {!error && linkToken && (
-            <p className="text-xs text-gray-400 mt-2">
-              Use credentials: user_good / pass_good for testing
-            </p>
-          )}
         </CardContent>
       </Card>
 

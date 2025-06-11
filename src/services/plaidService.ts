@@ -45,7 +45,7 @@ interface FetchOptions {
 
 class PlaidService {
   constructor() {
-    console.log('🏗️ PlaidService constructor called - using edge functions for API calls');
+    console.log('🏗️ PlaidService constructor called - using production Plaid API via edge functions');
   }
 
   async createLinkToken(userId: string): Promise<string> {
@@ -72,7 +72,7 @@ class PlaidService {
         throw new Error('No link token received from edge function');
       }
 
-      console.log('✅ Link token created successfully via edge function');
+      console.log('✅ Production link token created successfully via edge function');
       return data.link_token;
     } catch (error) {
       console.error('💥 createLinkToken failed:', error);
@@ -104,7 +104,7 @@ class PlaidService {
         throw new Error('No access token received from edge function');
       }
 
-      console.log('✅ Access token received via edge function');
+      console.log('✅ Production access token received via edge function');
       return data.access_token;
     } catch (error) {
       console.error('💥 exchangePublicToken failed:', error);
@@ -125,7 +125,7 @@ class PlaidService {
     });
     
     try {
-      console.log('📡 Calling fetch-plaid-data edge function with enhanced options...');
+      console.log('📡 Calling fetch-plaid-data edge function with production API...');
       
       const { data, error } = await supabase.functions.invoke('fetch-plaid-data', {
         body: { 
@@ -135,7 +135,7 @@ class PlaidService {
         }
       });
       
-      console.log('📊 Enhanced fetch data response:');
+      console.log('📊 Production fetch data response:');
       console.log('  - Data structure:', {
         hasAccounts: !!data?.accounts,
         hasTransactions: !!data?.transactions,
@@ -149,7 +149,7 @@ class PlaidService {
       console.log('  - Error:', error);
       
       if (error) {
-        console.error('❌ Fetch data edge function error:', error);
+        console.error('❌ Production fetch data edge function error:', error);
         throw new Error(`Fetch data error: ${JSON.stringify(error)}`);
       }
       
@@ -162,7 +162,7 @@ class PlaidService {
       const accounts = data.accounts || [];
       const transactions = data.transactions || [];
 
-      console.log('✅ Enhanced Plaid data processed successfully:', {
+      console.log('✅ Production Plaid data processed successfully:', {
         accounts: accounts.length,
         transactions: transactions.length,
         metadata: data.metadata,

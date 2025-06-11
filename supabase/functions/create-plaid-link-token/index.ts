@@ -46,8 +46,8 @@ serve(async (req) => {
       products: ['transactions'],
     }
 
-    console.log('🌐 Making request to Plaid API...')
-    const response = await fetch('https://sandbox.plaid.com/link/token/create', {
+    console.log('🌐 Making request to Plaid Production API...')
+    const response = await fetch('https://production.plaid.com/link/token/create', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,13 +55,13 @@ serve(async (req) => {
       body: JSON.stringify(request),
     })
 
-    console.log('📥 Plaid API response status:', response.status)
+    console.log('📥 Plaid Production API response status:', response.status)
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('❌ Plaid API error:', response.status, errorText)
+      console.error('❌ Plaid Production API error:', response.status, errorText)
       return new Response(
-        JSON.stringify({ error: `Plaid API error: ${response.status}` }),
+        JSON.stringify({ error: `Plaid Production API error: ${response.status}` }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: response.status,
@@ -70,10 +70,10 @@ serve(async (req) => {
     }
 
     const data = await response.json()
-    console.log('📊 Plaid API response received')
+    console.log('📊 Plaid Production API response received')
     
     if (data.error_code) {
-      console.error('❌ Plaid API error:', data.error_code, '-', data.error_message)
+      console.error('❌ Plaid Production API error:', data.error_code, '-', data.error_message)
       return new Response(
         JSON.stringify({ error: `${data.error_code}: ${data.error_message}` }),
         {
@@ -83,7 +83,7 @@ serve(async (req) => {
       )
     }
 
-    console.log('✅ Link token created successfully')
+    console.log('✅ Production link token created successfully')
     return new Response(
       JSON.stringify({ link_token: data.link_token }),
       {

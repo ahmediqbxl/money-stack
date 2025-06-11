@@ -37,8 +37,8 @@ serve(async (req) => {
       )
     }
 
-    console.log('📡 Fetching accounts from Plaid...')
-    const accountsResponse = await fetch('https://sandbox.plaid.com/accounts/get', {
+    console.log('📡 Fetching accounts from Plaid Production API...')
+    const accountsResponse = await fetch('https://production.plaid.com/accounts/get', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -52,12 +52,12 @@ serve(async (req) => {
 
     if (!accountsResponse.ok) {
       const errorText = await accountsResponse.text()
-      console.error('❌ Accounts API error:', accountsResponse.status, errorText)
-      throw new Error(`Accounts API error: ${accountsResponse.status}`)
+      console.error('❌ Production Accounts API error:', accountsResponse.status, errorText)
+      throw new Error(`Production Accounts API error: ${accountsResponse.status}`)
     }
 
     const accountsData = await accountsResponse.json()
-    console.log('✅ Accounts data received successfully:', {
+    console.log('✅ Production accounts data received successfully:', {
       accountsCount: accountsData.accounts?.length || 0,
       accounts: accountsData.accounts?.map(acc => ({
         id: acc.account_id,
@@ -72,7 +72,7 @@ serve(async (req) => {
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    console.log('📡 Starting transaction fetch with pagination...', { 
+    console.log('📡 Starting production transaction fetch with pagination...', { 
       startDate, 
       endDate, 
       daysBack,
@@ -90,14 +90,14 @@ serve(async (req) => {
       requestCount++
       const remainingToFetch = Math.min(batchSize, maxTransactions - allTransactions.length)
       
-      console.log(`📡 Fetching transaction batch ${requestCount}:`, {
+      console.log(`📡 Fetching production transaction batch ${requestCount}:`, {
         offset,
         count: remainingToFetch,
         alreadyFetched: allTransactions.length,
         maxTransactions
       })
 
-      const transactionsResponse = await fetch('https://sandbox.plaid.com/transactions/get', {
+      const transactionsResponse = await fetch('https://production.plaid.com/transactions/get', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -115,14 +115,14 @@ serve(async (req) => {
 
       if (!transactionsResponse.ok) {
         const errorText = await transactionsResponse.text()
-        console.error('❌ Transactions API error:', transactionsResponse.status, errorText)
-        throw new Error(`Transactions API error: ${transactionsResponse.status}`)
+        console.error('❌ Production Transactions API error:', transactionsResponse.status, errorText)
+        throw new Error(`Production Transactions API error: ${transactionsResponse.status}`)
       }
 
       const transactionsData = await transactionsResponse.json()
       totalAvailable = transactionsData.total_transactions || 0
       
-      console.log(`✅ Transaction batch ${requestCount} received:`, {
+      console.log(`✅ Production transaction batch ${requestCount} received:`, {
         batchSize: transactionsData.transactions?.length || 0,
         totalFetched: allTransactions.length + (transactionsData.transactions?.length || 0),
         totalAvailable,
@@ -151,7 +151,7 @@ serve(async (req) => {
       }
     }
 
-    console.log('🎯 Transaction fetching completed:', {
+    console.log('🎯 Production transaction fetching completed:', {
       totalRequests: requestCount,
       finalCount: allTransactions.length,
       totalAvailable,
@@ -177,7 +177,7 @@ serve(async (req) => {
       }
     }
 
-    console.log('🎉 Successfully returning enhanced Plaid data:', {
+    console.log('🎉 Successfully returning production Plaid data:', {
       accountsCount: responseData.accounts.length,
       transactionsCount: responseData.transactions.length,
       totalAvailable,

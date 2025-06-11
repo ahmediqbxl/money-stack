@@ -40,9 +40,8 @@ serve(async (req) => {
       public_token: publicToken,
     }
 
-    console.log('🌐 Making request to Plaid API...')
-    // Fixed the endpoint URL - the correct endpoint is /item/public_token/exchange
-    const response = await fetch('https://sandbox.plaid.com/item/public_token/exchange', {
+    console.log('🌐 Making request to Plaid Production API...')
+    const response = await fetch('https://production.plaid.com/item/public_token/exchange', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -50,13 +49,13 @@ serve(async (req) => {
       body: JSON.stringify(request),
     })
 
-    console.log('📥 Token exchange response status:', response.status)
+    console.log('📥 Production token exchange response status:', response.status)
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('❌ Token exchange error:', response.status, errorText)
+      console.error('❌ Production token exchange error:', response.status, errorText)
       return new Response(
-        JSON.stringify({ error: `Token exchange error: ${response.status}`, details: errorText }),
+        JSON.stringify({ error: `Production token exchange error: ${response.status}`, details: errorText }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: response.status,
@@ -65,10 +64,10 @@ serve(async (req) => {
     }
 
     const data = await response.json()
-    console.log('📊 Token exchange response received:', data)
+    console.log('📊 Production token exchange response received:', data)
     
     if (data.error_code) {
-      console.error('❌ Token exchange API error:', data.error_code, '-', data.error_message)
+      console.error('❌ Production token exchange API error:', data.error_code, '-', data.error_message)
       return new Response(
         JSON.stringify({ error: `${data.error_code}: ${data.error_message}` }),
         {
@@ -78,7 +77,7 @@ serve(async (req) => {
       )
     }
 
-    console.log('✅ Access token received successfully')
+    console.log('✅ Production access token received successfully')
     return new Response(
       JSON.stringify({ access_token: data.access_token }),
       {
