@@ -64,6 +64,12 @@ class PlaidService {
       
       if (error) {
         console.error('❌ Edge function error:', error);
+        
+        // Check for specific credential errors
+        if (error.message && error.message.includes('INVALID_API_KEYS')) {
+          throw new Error('Invalid Plaid credentials: Please verify your production PLAID_CLIENT_ID and PLAID_SECRET_KEY are correct and active.');
+        }
+        
         throw new Error(`Edge function error: ${JSON.stringify(error)}`);
       }
       

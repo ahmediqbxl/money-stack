@@ -1,7 +1,8 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Building2, X, AlertCircle } from 'lucide-react';
+import { Building2, X, AlertCircle, RefreshCw } from 'lucide-react';
 import { plaidService } from '@/services/plaidService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -116,30 +117,43 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
     setError(null);
   };
 
-  // Create link token on component mount
-  useEffect(() => {
-    const createLinkToken = async () => {
-      if (user && !linkToken && !isCreatingToken) {
-        setIsCreatingToken(true);
-        try {
-          console.log('🔄 Creating production link token for user:', user.id);
-          setError(null);
-          const token = await plaidService.createLinkToken(user.id);
-          setLinkToken(token);
-          console.log('✅ Production link token created successfully:', token.substring(0, 20) + '...');
-        } catch (error) {
-          console.error('💥 Error creating link token:', error);
-          setError(`Failed to initialize Plaid: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        } finally {
-          setIsCreatingToken(false);
-        }
-      }
-    };
+  const retryCreateToken = async () => {
+    setError(null);
+    setLinkToken(null);
+    await createLinkToken();
+  };
 
+  // Create link token on component mount
+  const createLinkToken = async () => {
+    if (user && !isCreatingToken) {
+      setIsCreatingToken(true);
+      try {
+        console.log('🔄 Creating production link token for user:', user.id);
+        setError(null);
+        const token = await plaidService.createLinkToken(user.id);
+        setLinkToken(token);
+        console.log('✅ Production link token created successfully:', token.substring(0, 20) + '...');
+      } catch (error) {
+        console.error('💥 Error creating link token:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        
+        if (errorMessage.includes('Invalid Plaid credentials')) {
+          setError('❌ Invalid Plaid Credentials: Your production API keys are not valid. Please check your PLAID_CLIENT_ID and PLAID_SECRET_KEY in the environment variables.');
+        } else {
+          setError(`Failed to initialize Plaid: ${errorMessage}`);
+        }
+      } finally {
+        setIsCreatingToken(false);
+      }
+    }
+  };
+
+  useEffect(() => {
     createLinkToken();
-  }, [user, linkToken, isCreatingToken]);
+  }, [user]);
 
   const canConnect = linkToken && isPlaidLoaded && !error && !isCreatingToken;
+  const isCredentialError = error && error.includes('Invalid Plaid credentials');
 
   return (
     <>
@@ -155,12 +169,33 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
         </CardHeader>
         <CardContent className="text-center">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2">
-              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-              <div className="text-left">
-                <p className="text-sm font-medium text-red-800">Connection Error</p>
-                <p className="text-sm text-red-600">{error}</p>
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-start space-x-2">
+                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="text-left flex-1">
+                  <p className="text-sm font-medium text-red-800">
+                    {isCredentialError ? 'Configuration Error' : 'Connection Error'}
+                  </p>
+                  <p className="text-sm text-red-600 mt-1">{error}</p>
+                  {isCredentialError && (
+                    <p className="text-xs text-red-500 mt-2">
+                      Please verify your production Plaid credentials are correct and active.
+                    </p>
+                  )}
+                </div>
               </div>
+              {!isCredentialError && (
+                <Button
+                  onClick={retryCreateToken}
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 text-red-600 border-red-300 hover:bg-red-50"
+                  disabled={isCreatingToken}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Retry
+                </Button>
+              )}
             </div>
           )}
           
@@ -178,10 +213,12 @@ const PlaidConnect = ({ onSuccess }: PlaidConnectProps) => {
               : !isPlaidLoaded 
                 ? 'Loading Plaid SDK...'
                 : error
-                  ? 'Please check configuration and try again'
+                  ? isCredentialError
+                    ? 'Please check your Plaid API configuration'
+                    : 'Please try again or contact support'
                   : isConnecting 
                     ? 'Connecting via Plaid Production...' 
-                    : 'Powered by Plaid - Production API via edge functions'
+                    : 'Powered by Plaid - Production API'
             }
           </p>
         </CardContent>

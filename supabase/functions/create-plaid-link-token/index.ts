@@ -22,6 +22,13 @@ serve(async (req) => {
     const clientId = Deno.env.get('PLAID_CLIENT_ID')
     const secret = Deno.env.get('PLAID_SECRET_KEY')
 
+    console.log('🔍 Credential check:', {
+      hasClientId: !!clientId,
+      hasSecret: !!secret,
+      clientIdPrefix: clientId ? clientId.substring(0, 8) + '...' : 'missing',
+      secretPrefix: secret ? secret.substring(0, 8) + '...' : 'missing'
+    });
+
     if (!clientId || !secret) {
       console.error('❌ Missing Plaid credentials')
       return new Response(
@@ -60,8 +67,29 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text()
       console.error('❌ Plaid Production API error:', response.status, errorText)
+      
+      // Parse error details for better reporting
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.error_code === 'INVALID_API_KEYS') {
+          return new Response(
+            JSON.stringify({ 
+              error: 'INVALID_API_KEYS',
+              message: 'Invalid Plaid credentials: Please verify your production PLAID_CLIENT_ID and PLAID_SECRET_KEY are correct and active.',
+              details: errorData 
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400,
+            },
+          )
+        }
+      } catch (parseError) {
+        console.log('Could not parse error response:', parseError);
+      }
+      
       return new Response(
-        JSON.stringify({ error: `Plaid Production API error: ${response.status}` }),
+        JSON.stringify({ error: `Plaid Production API error: ${response.status}`, details: errorText }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: response.status,
