@@ -72,87 +72,62 @@ serve(async (req) => {
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    console.log('📡 Starting production transaction fetch with pagination...', { 
+    console.log('📡 Starting production transaction fetch...', { 
       startDate, 
       endDate, 
       daysBack,
       maxTransactions
     })
 
-    // Fetch transactions with pagination
-    let allTransactions = []
-    let offset = 0
-    const batchSize = 500 // Maximum per request
-    let totalAvailable = 0
-    let requestCount = 0
+    // Fetch transactions - Production API uses different parameters
+    console.log('📡 Fetching production transactions...')
+    const transactionsResponse = await fetch('https://production.plaid.com/transactions/get', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        secret: secret,
+        access_token: accessToken,
+        start_date: startDate,
+        end_date: endDate,
+        // Production API uses 'count' not 'count' and 'offset' - let's use the maximum allowed
+        count: Math.min(maxTransactions, 500), // Max 500 per request in production
+      }),
+    })
 
-    while (allTransactions.length < maxTransactions) {
-      requestCount++
-      const remainingToFetch = Math.min(batchSize, maxTransactions - allTransactions.length)
+    if (!transactionsResponse.ok) {
+      const errorText = await transactionsResponse.text()
+      console.error('❌ Production Transactions API error:', transactionsResponse.status, errorText)
       
-      console.log(`📡 Fetching production transaction batch ${requestCount}:`, {
-        offset,
-        count: remainingToFetch,
-        alreadyFetched: allTransactions.length,
-        maxTransactions
-      })
-
-      const transactionsResponse = await fetch('https://production.plaid.com/transactions/get', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          client_id: clientId,
-          secret: secret,
-          access_token: accessToken,
-          start_date: startDate,
-          end_date: endDate,
-          count: remainingToFetch,
-          offset: offset,
+      // If transactions fail, we can still return accounts
+      console.log('⚠️ Continuing without transactions due to API error')
+      return new Response(
+        JSON.stringify({
+          accounts: accountsData.accounts || [],
+          transactions: [],
+          metadata: {
+            totalTransactions: 0,
+            totalAvailable: 0,
+            dateRange: { startDate, endDate },
+            daysBack,
+            requestCount: 1,
+            error: 'Transaction fetch failed but accounts retrieved successfully'
+          }
         }),
-      })
-
-      if (!transactionsResponse.ok) {
-        const errorText = await transactionsResponse.text()
-        console.error('❌ Production Transactions API error:', transactionsResponse.status, errorText)
-        throw new Error(`Production Transactions API error: ${transactionsResponse.status}`)
-      }
-
-      const transactionsData = await transactionsResponse.json()
-      totalAvailable = transactionsData.total_transactions || 0
-      
-      console.log(`✅ Production transaction batch ${requestCount} received:`, {
-        batchSize: transactionsData.transactions?.length || 0,
-        totalFetched: allTransactions.length + (transactionsData.transactions?.length || 0),
-        totalAvailable,
-        hasMore: totalAvailable > allTransactions.length + (transactionsData.transactions?.length || 0)
-      })
-
-      // Add transactions to our collection
-      if (transactionsData.transactions && transactionsData.transactions.length > 0) {
-        allTransactions = allTransactions.concat(transactionsData.transactions)
-        offset += transactionsData.transactions.length
-      } else {
-        console.log('📋 No more transactions in this batch, stopping pagination')
-        break
-      }
-
-      // Check if we've fetched everything available
-      if (allTransactions.length >= totalAvailable) {
-        console.log('📋 Fetched all available transactions')
-        break
-      }
-
-      // Safety check to prevent infinite loops
-      if (requestCount >= 10) {
-        console.log('⚠️ Maximum request count reached, stopping pagination')
-        break
-      }
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        },
+      )
     }
 
-    console.log('🎯 Production transaction fetching completed:', {
-      totalRequests: requestCount,
+    const transactionsData = await transactionsResponse.json()
+    const allTransactions = transactionsData.transactions || []
+    const totalAvailable = transactionsData.total_transactions || 0
+    
+    console.log('✅ Production transaction fetching completed:', {
       finalCount: allTransactions.length,
       totalAvailable,
       dateRange: `${startDate} to ${endDate}`,
@@ -173,7 +148,7 @@ serve(async (req) => {
         totalAvailable,
         dateRange: { startDate, endDate },
         daysBack,
-        requestCount
+        requestCount: 1
       }
     }
 
