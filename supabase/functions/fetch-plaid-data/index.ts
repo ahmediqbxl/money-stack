@@ -68,7 +68,7 @@ serve(async (req) => {
       }))
     })
 
-    // Calculate date range for transactions
+    // Calculate date range for transactions - try a longer range first
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
@@ -92,51 +92,23 @@ serve(async (req) => {
         access_token: accessToken,
         start_date: startDate,
         end_date: endDate,
-        // Use correct pagination parameters for Production API
-        offset: 0,
-        count: Math.min(maxTransactions, 500), // Max 500 per request in production
+        count: Math.min(maxTransactions, 500), // Start with max count
       }),
     })
+
+    let allTransactions = []
+    let totalAvailable = 0
+    let requestCount = 1
 
     if (!transactionsResponse.ok) {
       const errorText = await transactionsResponse.text()
       console.error('❌ Production Transactions API error:', transactionsResponse.status, errorText)
       
-      // If transactions fail, we can still return accounts
-      console.log('⚠️ Continuing without transactions due to API error')
-      return new Response(
-        JSON.stringify({
-          accounts: accountsData.accounts || [],
-          transactions: [],
-          metadata: {
-            totalTransactions: 0,
-            totalAvailable: 0,
-            dateRange: { startDate, endDate },
-            daysBack,
-            requestCount: 1,
-            error: 'Transaction fetch failed but accounts retrieved successfully'
-          }
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        },
-      )
-    }
-
-    const transactionsData = await transactionsResponse.json()
-    let allTransactions = transactionsData.transactions || []
-    const totalAvailable = transactionsData.total_transactions || 0
-    let requestCount = 1
-
-    // If we have more transactions available and haven't reached our limit, fetch more
-    while (allTransactions.length < Math.min(totalAvailable, maxTransactions) && allTransactions.length < maxTransactions) {
-      const remaining = Math.min(totalAvailable - allTransactions.length, maxTransactions - allTransactions.length)
-      if (remaining <= 0) break
-
-      console.log(`📡 Fetching additional transactions (${allTransactions.length}/${totalAvailable})...`)
+      // Try with a different date range - maybe the account is new
+      console.log('⚠️ Trying with extended date range (365 days)...')
+      const extendedStartDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
       
-      const nextResponse = await fetch('https://production.plaid.com/transactions/get', {
+      const retryResponse = await fetch('https://production.plaid.com/transactions/get', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -145,25 +117,93 @@ serve(async (req) => {
           client_id: clientId,
           secret: secret,
           access_token: accessToken,
-          start_date: startDate,
+          start_date: extendedStartDate,
           end_date: endDate,
-          offset: allTransactions.length,
-          count: Math.min(remaining, 500),
+          count: 500,
         }),
       })
 
-      if (!nextResponse.ok) {
-        console.error('❌ Additional transactions fetch failed:', nextResponse.status)
-        break
+      if (!retryResponse.ok) {
+        const retryErrorText = await retryResponse.text()
+        console.error('❌ Extended date range also failed:', retryResponse.status, retryErrorText)
+        
+        // Return accounts but indicate transaction fetch failed
+        return new Response(
+          JSON.stringify({
+            accounts: accountsData.accounts || [],
+            transactions: [],
+            metadata: {
+              totalTransactions: 0,
+              totalAvailable: 0,
+              dateRange: { startDate, endDate },
+              daysBack,
+              requestCount: 1,
+              error: `Transaction fetch failed: ${retryErrorText}`,
+              extendedRangeTried: true
+            }
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          },
+        )
       }
 
-      const nextData = await nextResponse.json()
-      if (!nextData.transactions || nextData.transactions.length === 0) {
-        break
-      }
+      const retryData = await retryResponse.json()
+      allTransactions = retryData.transactions || []
+      totalAvailable = retryData.total_transactions || 0
+      console.log('✅ Extended date range worked:', {
+        transactions: allTransactions.length,
+        totalAvailable,
+        dateRange: `${extendedStartDate} to ${endDate}`
+      })
+    } else {
+      const transactionsData = await transactionsResponse.json()
+      allTransactions = transactionsData.transactions || []
+      totalAvailable = transactionsData.total_transactions || 0
 
-      allTransactions = [...allTransactions, ...nextData.transactions]
-      requestCount++
+      console.log('✅ Initial transaction fetch completed:', {
+        received: allTransactions.length,
+        totalAvailable,
+        dateRange: `${startDate} to ${endDate}`
+      })
+
+      // If we have more transactions available and haven't reached our limit, fetch more
+      while (allTransactions.length < Math.min(totalAvailable, maxTransactions) && allTransactions.length < maxTransactions) {
+        const remaining = Math.min(totalAvailable - allTransactions.length, maxTransactions - allTransactions.length)
+        if (remaining <= 0) break
+
+        console.log(`📡 Fetching additional transactions (${allTransactions.length}/${totalAvailable})...`)
+        
+        const nextResponse = await fetch('https://production.plaid.com/transactions/get', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            client_id: clientId,
+            secret: secret,
+            access_token: accessToken,
+            start_date: startDate,
+            end_date: endDate,
+            offset: allTransactions.length,
+            count: Math.min(remaining, 500),
+          }),
+        })
+
+        if (!nextResponse.ok) {
+          console.error('❌ Additional transactions fetch failed:', nextResponse.status)
+          break
+        }
+
+        const nextData = await nextResponse.json()
+        if (!nextData.transactions || nextData.transactions.length === 0) {
+          break
+        }
+
+        allTransactions = [...allTransactions, ...nextData.transactions]
+        requestCount++
+      }
     }
     
     console.log('✅ Production transaction fetching completed:', {
