@@ -68,7 +68,7 @@ serve(async (req) => {
       }))
     })
 
-    // Calculate date range for transactions - try a longer range first
+    // Calculate date range for transactions
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
@@ -92,7 +92,6 @@ serve(async (req) => {
         access_token: accessToken,
         start_date: startDate,
         end_date: endDate,
-        count: Math.min(maxTransactions, 500), // Start with max count
       }),
     })
 
@@ -104,9 +103,9 @@ serve(async (req) => {
       const errorText = await transactionsResponse.text()
       console.error('❌ Production Transactions API error:', transactionsResponse.status, errorText)
       
-      // Try with a different date range - maybe the account is new
-      console.log('⚠️ Trying with extended date range (365 days)...')
-      const extendedStartDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      // Try with a longer date range - maybe the account has older transactions
+      console.log('⚠️ Trying with extended date range (730 days)...')
+      const extendedStartDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
       
       const retryResponse = await fetch('https://production.plaid.com/transactions/get', {
         method: 'POST',
@@ -119,7 +118,6 @@ serve(async (req) => {
           access_token: accessToken,
           start_date: extendedStartDate,
           end_date: endDate,
-          count: 500,
         }),
       })
 
@@ -167,43 +165,6 @@ serve(async (req) => {
         totalAvailable,
         dateRange: `${startDate} to ${endDate}`
       })
-
-      // If we have more transactions available and haven't reached our limit, fetch more
-      while (allTransactions.length < Math.min(totalAvailable, maxTransactions) && allTransactions.length < maxTransactions) {
-        const remaining = Math.min(totalAvailable - allTransactions.length, maxTransactions - allTransactions.length)
-        if (remaining <= 0) break
-
-        console.log(`📡 Fetching additional transactions (${allTransactions.length}/${totalAvailable})...`)
-        
-        const nextResponse = await fetch('https://production.plaid.com/transactions/get', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            client_id: clientId,
-            secret: secret,
-            access_token: accessToken,
-            start_date: startDate,
-            end_date: endDate,
-            offset: allTransactions.length,
-            count: Math.min(remaining, 500),
-          }),
-        })
-
-        if (!nextResponse.ok) {
-          console.error('❌ Additional transactions fetch failed:', nextResponse.status)
-          break
-        }
-
-        const nextData = await nextResponse.json()
-        if (!nextData.transactions || nextData.transactions.length === 0) {
-          break
-        }
-
-        allTransactions = [...allTransactions, ...nextData.transactions]
-        requestCount++
-      }
     }
     
     console.log('✅ Production transaction fetching completed:', {
