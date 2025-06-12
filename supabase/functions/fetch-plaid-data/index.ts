@@ -79,7 +79,7 @@ serve(async (req) => {
       maxTransactions
     })
 
-    // Fetch transactions - Production API uses different parameters
+    // Fetch transactions using correct Production API parameters
     console.log('📡 Fetching production transactions...')
     const transactionsResponse = await fetch('https://production.plaid.com/transactions/get', {
       method: 'POST',
@@ -92,7 +92,8 @@ serve(async (req) => {
         access_token: accessToken,
         start_date: startDate,
         end_date: endDate,
-        // Production API uses 'count' not 'count' and 'offset' - let's use the maximum allowed
+        // Use correct pagination parameters for Production API
+        offset: 0,
         count: Math.min(maxTransactions, 500), // Max 500 per request in production
       }),
     })
@@ -124,13 +125,52 @@ serve(async (req) => {
     }
 
     const transactionsData = await transactionsResponse.json()
-    const allTransactions = transactionsData.transactions || []
+    let allTransactions = transactionsData.transactions || []
     const totalAvailable = transactionsData.total_transactions || 0
+    let requestCount = 1
+
+    // If we have more transactions available and haven't reached our limit, fetch more
+    while (allTransactions.length < Math.min(totalAvailable, maxTransactions) && allTransactions.length < maxTransactions) {
+      const remaining = Math.min(totalAvailable - allTransactions.length, maxTransactions - allTransactions.length)
+      if (remaining <= 0) break
+
+      console.log(`📡 Fetching additional transactions (${allTransactions.length}/${totalAvailable})...`)
+      
+      const nextResponse = await fetch('https://production.plaid.com/transactions/get', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: clientId,
+          secret: secret,
+          access_token: accessToken,
+          start_date: startDate,
+          end_date: endDate,
+          offset: allTransactions.length,
+          count: Math.min(remaining, 500),
+        }),
+      })
+
+      if (!nextResponse.ok) {
+        console.error('❌ Additional transactions fetch failed:', nextResponse.status)
+        break
+      }
+
+      const nextData = await nextResponse.json()
+      if (!nextData.transactions || nextData.transactions.length === 0) {
+        break
+      }
+
+      allTransactions = [...allTransactions, ...nextData.transactions]
+      requestCount++
+    }
     
     console.log('✅ Production transaction fetching completed:', {
       finalCount: allTransactions.length,
       totalAvailable,
       dateRange: `${startDate} to ${endDate}`,
+      requestCount,
       sampleTransaction: allTransactions[0] ? {
         id: allTransactions[0].transaction_id,
         name: allTransactions[0].name,
@@ -148,7 +188,7 @@ serve(async (req) => {
         totalAvailable,
         dateRange: { startDate, endDate },
         daysBack,
-        requestCount: 1
+        requestCount
       }
     }
 
