@@ -36,9 +36,13 @@ export interface DatabaseCategory {
 class DatabaseService {
   // Account operations
   async getAccounts(): Promise<DatabaseAccount[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
     const { data, error } = await supabase
       .from('accounts')
       .select('*')
+      .eq('user_id', user.id)
       .eq('is_active', true)
       .order('connected_at', { ascending: false });
 
@@ -46,6 +50,11 @@ class DatabaseService {
       console.error('Error fetching accounts:', error);
       throw error;
     }
+
+    console.log('📊 Fetched accounts from database:', {
+      count: data?.length || 0,
+      userId: user.id
+    });
 
     // Type assertion to handle the provider field correctly
     return (data || []).map(account => ({
@@ -97,31 +106,71 @@ class DatabaseService {
   }
 
   async deleteAccount(accountId: string): Promise<void> {
-    console.log('🗑️ Deleting account:', accountId);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    console.log('🗑️ Starting account deletion process:', { accountId, userId: user.id });
     
-    // First, delete all transactions for this account
-    const { error: transactionError } = await supabase
+    // First, verify the account belongs to the current user
+    const { data: accountCheck, error: checkError } = await supabase
+      .from('accounts')
+      .select('id, user_id, bank_name')
+      .eq('id', accountId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (checkError || !accountCheck) {
+      console.error('❌ Account not found or access denied:', checkError);
+      throw new Error('Account not found or access denied');
+    }
+
+    console.log('✅ Account verified for deletion:', accountCheck);
+
+    // Delete all transactions for this account (hard delete for cleanup)
+    const { error: transactionError, count: deletedTransactions } = await supabase
       .from('transactions')
       .delete()
-      .eq('account_id', accountId);
+      .eq('account_id', accountId)
+      .eq('user_id', user.id);
 
     if (transactionError) {
-      console.error('Error deleting account transactions:', transactionError);
+      console.error('❌ Error deleting account transactions:', transactionError);
       throw transactionError;
     }
 
-    // Then mark the account as inactive (soft delete)
-    const { error: accountError } = await supabase
+    console.log('🗑️ Deleted transactions:', deletedTransactions);
+
+    // Soft delete the account by setting is_active to false
+    const { error: accountError, count: updatedAccounts } = await supabase
       .from('accounts')
-      .update({ is_active: false })
-      .eq('id', accountId);
+      .update({ 
+        is_active: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', accountId)
+      .eq('user_id', user.id);
 
     if (accountError) {
-      console.error('Error deleting account:', accountError);
+      console.error('❌ Error soft-deleting account:', accountError);
       throw accountError;
     }
 
-    console.log('✅ Account and transactions successfully deleted');
+    console.log('✅ Account soft-deleted successfully:', { 
+      accountId, 
+      updatedCount: updatedAccounts 
+    });
+
+    // Verify the deletion worked by checking active accounts
+    const { data: remainingAccounts } = await supabase
+      .from('accounts')
+      .select('id, bank_name')
+      .eq('user_id', user.id)
+      .eq('is_active', true);
+
+    console.log('📊 Remaining active accounts after deletion:', {
+      count: remainingAccounts?.length || 0,
+      accounts: remainingAccounts?.map(a => ({ id: a.id, name: a.bank_name }))
+    });
   }
 
   // Transaction operations
