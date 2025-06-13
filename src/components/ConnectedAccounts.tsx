@@ -1,9 +1,8 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Building2, Plus, Trash2, RefreshCw, Brain, Calendar } from 'lucide-react';
+import { Building2, Plus, Trash2, RefreshCw, Calendar } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import PlaidConnect from './PlaidConnect';
 import { usePlaidData } from '@/hooks/usePlaidData';
@@ -35,7 +34,6 @@ const ConnectedAccounts = () => {
     isLoading,
     fetchPlaidData,
     handlePlaidSuccess,
-    categorizeTransactions,
     lastFetchMetadata,
   } = usePlaidData();
 
@@ -107,6 +105,7 @@ const ConnectedAccounts = () => {
                 <p className="text-xs text-gray-500">
                   Last sync: {lastFetchMetadata.totalTransactions} transactions 
                   ({lastFetchMetadata.daysBack} days, {lastFetchMetadata.requestCount} API calls)
+                  • AI categorization enabled
                 </p>
               )}
             </div>
@@ -115,15 +114,6 @@ const ConnectedAccounts = () => {
         <div className="flex space-x-2">
           {accounts.length > 0 && (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={categorizeTransactions}
-                disabled={isLoading || transactions.length === 0}
-              >
-                <Brain className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                AI Categorize
-              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -240,7 +230,7 @@ const ConnectedAccounts = () => {
           <CardHeader>
             <CardTitle>Recent Transactions ({transactions.length})</CardTitle>
             <CardDescription>
-              Latest transactions from your connected accounts
+              Latest transactions from your connected accounts (Auto-categorized by AI)
               {lastFetchMetadata && lastFetchMetadata.totalAvailable > transactions.length && (
                 <span className="text-orange-600">
                   {" "}• {lastFetchMetadata.totalAvailable - transactions.length} more available

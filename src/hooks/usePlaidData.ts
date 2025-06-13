@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { plaidService } from '@/services/plaidService';
 import { supabase } from '@/integrations/supabase/client';
@@ -44,6 +45,45 @@ export const usePlaidData = () => {
       setPlaidAccessToken(storedAccessToken);
     }
   }, []);
+
+  // Auto-categorize transactions when they're loaded
+  const autoCategorizeTransactions = useCallback(async (transactionsToProcess: any[]) => {
+    if (transactionsToProcess.length === 0) return;
+
+    console.log('🤖 Auto-categorizing', transactionsToProcess.length, 'transactions');
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('categorize-transactions', {
+        body: { transactions: transactionsToProcess }
+      });
+
+      if (error) throw error;
+
+      console.log('🤖 Auto-categorization response:', data);
+
+      // Update categories for uncategorized transactions
+      const updatePromises = data.categorizedTransactions.map((catTrans: any) => {
+        const originalTrans = transactionsToProcess.find(t => 
+          t.description === catTrans.description || 
+          (Math.abs(t.amount - Math.abs(catTrans.amount)) < 0.01 &&
+           t.description.toLowerCase().includes(catTrans.description.toLowerCase().split(' ')[0]))
+        );
+        
+        if (originalTrans && catTrans.category && !originalTrans.is_manual_category) {
+          console.log('🤖 Auto-updating category for:', originalTrans.description, 'to', catTrans.category);
+          return updateTransactionCategory(originalTrans.id, catTrans.category);
+        }
+      }).filter(Boolean);
+
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+        console.log('✅ Auto-categorized', updatePromises.length, 'transactions');
+      }
+    } catch (error) {
+      console.error('❌ Auto-categorization failed:', error);
+      // Don't show error toast for auto-categorization failures
+    }
+  }, [updateTransactionCategory]);
 
   const fetchPlaidData = useCallback(async (
     accessToken?: string, 
@@ -168,6 +208,14 @@ export const usePlaidData = () => {
             amount: t.amount 
           }))
         });
+
+        // Auto-categorize the new transactions
+        const uncategorizedTransactions = savedTransactions.filter(t => !t.category_name || !t.is_manual_category);
+        if (uncategorizedTransactions.length > 0) {
+          console.log('🤖 Starting auto-categorization for', uncategorizedTransactions.length, 'uncategorized transactions');
+          // Run categorization in the background without awaiting
+          setTimeout(() => autoCategorizeTransactions(uncategorizedTransactions), 1000);
+        }
       } else {
         console.log('⚠️ No transactions to save after transformation');
       }
@@ -175,8 +223,8 @@ export const usePlaidData = () => {
       setHasFetched(true);
       
       const successMessage = data.metadata 
-        ? `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} of ${data.metadata.totalAvailable} available transactions (${data.metadata.daysBack} days)`
-        : `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} transactions.`;
+        ? `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} of ${data.metadata.totalAvailable} available transactions (${data.metadata.daysBack} days) - AI categorization will run automatically`
+        : `Successfully loaded ${savedAccounts.length} accounts and ${transformedTransactions.length} transactions - AI categorization will run automatically`;
       
       toast({
         title: "Accounts Updated",
@@ -194,7 +242,7 @@ export const usePlaidData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [plaidAccessToken, isLoading, saveAccount, saveTransactions, toast]);
+  }, [plaidAccessToken, isLoading, saveAccount, saveTransactions, toast, autoCategorizeTransactions]);
 
   const handlePlaidSuccess = async (accessToken: string) => {
     console.log('🎯 Plaid success, storing token and immediately fetching enhanced data:', accessToken.substring(0, 20) + '...');
@@ -207,80 +255,12 @@ export const usePlaidData = () => {
     await fetchPlaidData(accessToken, { daysBack: 90, maxTransactions: 2000 });
   };
 
-  const categorizeTransactions = async () => {
-    if (transactions.length === 0) return;
-
-    setIsLoading(true);
-    console.log('🧠 Starting AI categorization for', transactions.length, 'transactions');
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('categorize-transactions', {
-        body: { transactions: transactions }
-      });
-
-      if (error) throw error;
-
-      console.log('🧠 AI categorization response:', data);
-
-      // Improved matching logic with better logging
-      const updatePromises = data.categorizedTransactions.map((catTrans: any) => {
-        // Try exact match on description first
-        let originalTrans = transactions.find(t => t.description === catTrans.description);
-        
-        // If no exact match, try fuzzy matching
-        if (!originalTrans) {
-          originalTrans = transactions.find(t => 
-            Math.abs(t.amount - Math.abs(catTrans.amount)) < 0.01 &&
-            t.description.toLowerCase().includes(catTrans.description.toLowerCase().split(' ')[0])
-          );
-        }
-        
-        console.log('🔍 Matching attempt:', {
-          aiDescription: catTrans.description,
-          aiCategory: catTrans.category,
-          found: !!originalTrans,
-          originalDescription: originalTrans?.description,
-          isManual: originalTrans?.is_manual_category
-        });
-        
-        if (originalTrans && catTrans.category && !originalTrans.is_manual_category) {
-          console.log('✅ Updating category for:', originalTrans.description, 'to', catTrans.category);
-          return updateTransactionCategory(originalTrans.id, catTrans.category);
-        } else {
-          console.log('⚠️ Skipping update for:', catTrans.description, 'reasons:', {
-            noOriginal: !originalTrans,
-            noCategory: !catTrans.category,
-            isManual: originalTrans?.is_manual_category
-          });
-        }
-      }).filter(Boolean);
-
-      console.log('🔄 Executing', updatePromises.length, 'category updates');
-      await Promise.all(updatePromises);
-
-      toast({
-        title: "Transactions Categorized",
-        description: `AI successfully categorized ${updatePromises.length} transactions.`,
-      });
-    } catch (error) {
-      console.error('Error categorizing transactions:', error);
-      toast({
-        title: "Error",
-        description: "Failed to categorize transactions.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return {
     accounts,
     transactions,
     isLoading,
     fetchPlaidData,
     handlePlaidSuccess,
-    categorizeTransactions,
     lastFetchMetadata,
   };
 };
