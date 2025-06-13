@@ -134,7 +134,7 @@ export const useDatabase = () => {
       // Call the database service to delete the account and its transactions
       await databaseService.deleteAccount(accountId);
       
-      // Immediately update local state to remove the account and its transactions
+      // Update local state by filtering out the deleted account and its transactions
       setAccounts(prev => {
         const filtered = prev.filter(a => a.id !== accountId);
         console.log('🔄 Updated accounts state:', filtered.length, 'accounts remaining');
@@ -146,6 +146,9 @@ export const useDatabase = () => {
         console.log('🔄 Updated transactions state:', filtered.length, 'transactions remaining');
         return filtered;
       });
+      
+      // Reload all data to ensure consistency with the database
+      await loadAllData();
       
       toast({
         title: "Account Removed",
