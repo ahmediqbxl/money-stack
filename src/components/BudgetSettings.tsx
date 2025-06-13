@@ -10,30 +10,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useToast } from "@/hooks/use-toast";
 import { DollarSign, Target, TrendingUp, AlertTriangle, Plus, Brain } from 'lucide-react';
 import { useDatabase } from '@/hooks/useDatabase';
+import { useBudgets } from '@/hooks/useBudgets';
 import { supabase } from '@/integrations/supabase/client';
-
-interface BudgetCategory {
-  id: string;
-  name: string;
-  budget: number;
-  spent: number;
-  color: string;
-}
 
 const BudgetSettings = () => {
   const { toast } = useToast();
   const { transactions } = useDatabase();
+  const { budgets, updateBudget, addBudget, saveBudgets } = useBudgets();
   
-  // Initial budget data (this would eventually come from a backend)
-  const [budgets, setBudgets] = useState<BudgetCategory[]>([
-    { id: '1', name: 'Food & Dining', budget: 800, spent: 850, color: '#FF6B6B' },
-    { id: '2', name: 'Transportation', budget: 400, spent: 420, color: '#4ECDC4' },
-    { id: '3', name: 'Shopping', budget: 500, spent: 680, color: '#45B7D1' },
-    { id: '4', name: 'Entertainment', budget: 300, spent: 320, color: '#96CEB4' },
-    { id: '5', name: 'Bills & Utilities', budget: 600, spent: 580, color: '#FFEAA7' },
-    { id: '6', name: 'Healthcare', budget: 200, spent: 250, color: '#DDA0DD' },
-  ]);
-
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [isGeneratingBudgets, setIsGeneratingBudgets] = useState(false);
@@ -42,6 +26,22 @@ const BudgetSettings = () => {
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryBudget, setNewCategoryBudget] = useState<string>('');
+
+  // Calculate spending for each budget category
+  const getBudgetsWithSpending = () => {
+    return budgets.map(budget => {
+      const spent = transactions
+        .filter(t => t.amount < 0 && t.category_name?.toLowerCase() === budget.category_name.toLowerCase())
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      
+      return {
+        ...budget,
+        spent: Math.round(spent * 100) / 100
+      };
+    });
+  };
+
+  const budgetsWithSpending = getBudgetsWithSpending();
 
   const handleEditBudget = (id: string, currentBudget: number) => {
     setEditingId(id);
@@ -59,10 +59,7 @@ const BudgetSettings = () => {
       return;
     }
 
-    setBudgets(budgets.map(budget => 
-      budget.id === id ? { ...budget, budget: newBudget } : budget
-    ));
-
+    updateBudget(id, newBudget);
     setEditingId(null);
     setEditValue('');
 
@@ -98,7 +95,7 @@ const BudgetSettings = () => {
     }
 
     // Check if category already exists
-    if (budgets.some(b => b.name.toLowerCase() === newCategoryName.toLowerCase())) {
+    if (budgets.some(b => b.category_name.toLowerCase() === newCategoryName.toLowerCase())) {
       toast({
         title: "Category Exists",
         description: "A category with this name already exists.",
@@ -107,27 +104,17 @@ const BudgetSettings = () => {
       return;
     }
 
-    // Generate a random color for the new category
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#F39C12', '#E74C3C', '#9B59B6', '#1ABC9C'];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-    const newCategory: BudgetCategory = {
-      id: Date.now().toString(),
-      name: newCategoryName.trim(),
-      budget: budget,
-      spent: 0,
-      color: randomColor
-    };
-
-    setBudgets([...budgets, newCategory]);
+    const newBudget = addBudget(newCategoryName.trim(), budget);
     setNewCategoryName('');
     setNewCategoryBudget('');
     setIsAddCategoryOpen(false);
 
-    toast({
-      title: "Category Added",
-      description: `${newCategory.name} category has been created with a budget of $${budget}.`,
-    });
+    if (newBudget) {
+      toast({
+        title: "Category Added",
+        description: `${newBudget.category_name} category has been created with a budget of $${budget}.`,
+      });
+    }
   };
 
   const handleGenerateBudgets = async () => {
@@ -153,7 +140,7 @@ const BudgetSettings = () => {
         body: {
           totalSpent,
           categorySpending,
-          currentBudgets: budgets.map(b => ({ name: b.name, budget: b.budget, spent: b.spent })),
+          currentBudgets: budgets.map(b => ({ name: b.category_name, budget: b.budget_amount, spent: budgetsWithSpending.find(bs => bs.id === b.id)?.spent || 0 })),
           spendingData
         }
       });
@@ -165,12 +152,12 @@ const BudgetSettings = () => {
       // Update budgets with GPT recommendations
       const updatedBudgets = budgets.map(budget => {
         const allocation = allocatedBudgets.find((a: any) => 
-          a.category.toLowerCase() === budget.name.toLowerCase()
+          a.category.toLowerCase() === budget.category_name.toLowerCase()
         );
-        return allocation ? { ...budget, budget: allocation.recommendedBudget } : budget;
+        return allocation ? { ...budget, budget_amount: allocation.recommendedBudget, updated_at: new Date().toISOString() } : budget;
       });
 
-      setBudgets(updatedBudgets);
+      saveBudgets(updatedBudgets);
       
       toast({
         title: "Budgets Allocated",
@@ -189,8 +176,8 @@ const BudgetSettings = () => {
     }
   };
 
-  const totalBudget = budgets.reduce((sum, budget) => sum + budget.budget, 0);
-  const totalSpent = budgets.reduce((sum, budget) => sum + budget.spent, 0);
+  const totalBudget = budgets.reduce((sum, budget) => sum + budget.budget_amount, 0);
+  const totalSpent = budgetsWithSpending.reduce((sum, budget) => sum + budget.spent, 0);
 
   return (
     <div className="space-y-6">
@@ -239,9 +226,9 @@ const BudgetSettings = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {budgets.map((budget) => {
-            const percentage = (budget.spent / budget.budget) * 100;
-            const isOverBudget = budget.spent > budget.budget;
+          {budgetsWithSpending.map((budget) => {
+            const percentage = (budget.spent / budget.budget_amount) * 100;
+            const isOverBudget = budget.spent > budget.budget_amount;
             
             return (
               <div key={budget.id} className="space-y-3">
@@ -252,9 +239,9 @@ const BudgetSettings = () => {
                       style={{ backgroundColor: budget.color }}
                     ></div>
                     <div>
-                      <p className="font-medium">{budget.name}</p>
+                      <p className="font-medium">{budget.category_name}</p>
                       <p className="text-sm text-gray-500">
-                        ${budget.spent.toLocaleString()} spent of ${budget.budget.toLocaleString()}
+                        ${budget.spent.toLocaleString()} spent of ${budget.budget_amount.toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -294,7 +281,7 @@ const BudgetSettings = () => {
                       <Button 
                         size="sm" 
                         variant="outline"
-                        onClick={() => handleEditBudget(budget.id, budget.budget)}
+                        onClick={() => handleEditBudget(budget.id, budget.budget_amount)}
                       >
                         Edit Budget
                       </Button>
@@ -311,7 +298,7 @@ const BudgetSettings = () => {
                     <span>{percentage.toFixed(1)}% used</span>
                     {isOverBudget && (
                       <span className="text-red-500">
-                        ${(budget.spent - budget.budget).toLocaleString()} over
+                        ${(budget.spent - budget.budget_amount).toLocaleString()} over
                       </span>
                     )}
                   </div>
